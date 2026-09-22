@@ -1,0 +1,12 @@
+# USD per 1M tokens, standard tier. Source: OpenAI API pricing page, checked 2026-09-22.
+# Override at runtime with OPENAI_PRICING_JSON. Unknown models cost 0 and are flagged in the summary.
+gpt-5.5:      {input: 5.00,  cached_input: 0.50,  output: 30.00}
+gpt-5.5-pro:  {input: 30.00, cached_input: 0.00,  output: 180.00}
+gpt-5.4:      {input: 2.50,  cached_input: 0.25,  output: 15.00}
+gpt-5.4-mini: {input: 0.75,  cached_input: 0.075, output: 4.50}
+gpt-5.4-nano: {input: 0.20,  cached_input: 0.02,  output: 1.25}
+gpt-5.2:      {input: 1.75,  cached_input: 0.175, output: 14.00}
+gpt-5.1:      {input: 1.25,  cached_input: 0.125, output: 10.00}
+gpt-5:        {input: 1.25,  cached_input: 0.125, output: 10.00}
+gpt-5-mini:   {input: 0.25,  cached_input: 0.025, output: 2.00}
+gpt-5-nano:   {input: 0.05,  cached_input: 0.005, output: 0.40}

@@ -1,0 +1,51 @@
+{
+  "recorded_at": "2026-09-22T11:03:25.480404+00:00",
+  "result": {
+    "providers_seen": [
+      "aws",
+      "azure",
+      "entra_id",
+      "github",
+      "google",
+      "okta",
+      "openai_admin",
+      "stackql_preview"
+    ],
+    "queries_run": 4,
+    "rows_by_query": [
+      "smoke/aws_regions: 17 rows",
+      "smoke/azure_resource_groups: 3 rows",
+      "smoke/github_org_repos: 73 rows",
+      "smoke/google_buckets: 13 rows"
+    ],
+    "notes": "Ran the four provided SELECT statements verbatim. All returned rows successfully."
+  },
+  "ledger": {
+    "scenario": "smoke",
+    "trace_id": "trace_f44dc947377b4b32b7ffd3e9f5d44325",
+    "trace_url": "https://platform.openai.com/traces/trace?trace_id=trace_f44dc947377b4b32b7ffd3e9f5d44325",
+    "started_at": "2026-09-22T11:03:09.473070+00:00",
+    "duration_s": 15.989813,
+    "total_cost_usd": 0.007797,
+    "entries": [
+      {
+        "label": "smoke",
+        "model": "gpt-5.4-mini",
+        "requests": 6,
+        "input_tokens": 14771,
+        "cached_tokens": 7168,
+        "output_tokens": 346,
+        "reasoning_tokens": 9,
+        "tool_calls": 5,
+        "select_calls": 4,
+        "mutation_calls": 0,
+        "tool_names": {
+          "list_providers": 1,
+          "run_select_query": 4
+        },
+        "cost_usd": 0.00779685
+      }
+    ],
+    "notes": []
+  }
+}

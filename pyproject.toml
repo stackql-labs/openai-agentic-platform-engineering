@@ -1,0 +1,39 @@
+[project]
+name = "oape"
+version = "0.1.0"
+description = "Always-on platform engineering, SRE, audit and FinOps agents on the OpenAI Agents SDK with StackQL via MCP"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai-agents>=0.22,<1",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "boto3>=1.34",
+    "stackql-deploy>=1.9",
+    "rich>=13.7",
+    "httpx>=0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".stackql", "snapshots", "seed/terraform"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,468 @@
+{
+  "recorded_at": "2026-09-22T10:49:02.508743+00:00",
+  "findings": {
+    "scenario": "finops",
+    "findings": [
+      {
+        "provider": "aws",
+        "resource": "vol-05792085352e4a3db",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-05792085352e4a3db, size_gb=8, volume_type=gp3, availability_zone=ap-southeast-2a, est_monthly_usd=0.77",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-05792085352e4a3db';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.77
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-003cc7ab19db52a16",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-003cc7ab19db52a16, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-003cc7ab19db52a16';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-08ba9f209b2b8a11b",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-08ba9f209b2b8a11b, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-08ba9f209b2b8a11b';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-077beae6eaa6dfe77",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-077beae6eaa6dfe77, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-077beae6eaa6dfe77';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-0ab197e934110fcc9",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-0ab197e934110fcc9, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-0ab197e934110fcc9';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-0626c233d468aaaf0",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-0626c233d468aaaf0, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-0626c233d468aaaf0';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-0d2a256d3e79ae0d5",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-0d2a256d3e79ae0d5, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-0d2a256d3e79ae0d5';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-0e620fc9c3b6d55db",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-0e620fc9c3b6d55db, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-0e620fc9c3b6d55db';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "vol-0587b977863c0dead",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Unattached EBS volume is incurring idle storage cost",
+        "evidence": "finops/aws_unattached_volumes: volume_id=vol-0587b977863c0dead, size_gb=1, volume_type=gp2, availability_zone=ap-southeast-2a, est_monthly_usd=0.12",
+        "proposed_remediation": "DELETE FROM aws.ec2.volumes WHERE region = 'ap-southeast-2' AND volume_id = 'vol-0587b977863c0dead';",
+        "query_id": "finops/aws_unattached_volumes",
+        "monthly_cost_estimate_usd": 0.12
+      },
+      {
+        "provider": "aws",
+        "resource": "15.135.149.161",
+        "finding_type": "unassociated_ip",
+        "severity": "low",
+        "title": "Elastic IP is allocated but unassociated",
+        "evidence": "finops/aws_unassociated_eips: public_ip=15.135.149.161, allocation_id=eipalloc-0cec86824fe8c5c91, domain=vpc, est_monthly_usd=3.65",
+        "proposed_remediation": "EXEC aws.ec2.release_address(region => 'ap-southeast-2', allocation_id => 'eipalloc-0cec86824fe8c5c91');",
+        "query_id": "finops/aws_unassociated_eips",
+        "monthly_cost_estimate_usd": 3.65
+      },
+      {
+        "provider": "azure",
+        "resource": "/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/OAPE-DEMO-RG/providers/Microsoft.Compute/disks/oape-demo-orphan-disk",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Managed disk is unattached",
+        "evidence": "finops/azure_unattached_disks: name=oape-demo-orphan-disk, id=/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/OAPE-DEMO-RG/providers/Microsoft.Compute/disks/oape-demo-orphan-disk, location=eastus2, disk_size_gb=8, sku=Standard_LRS, disk_state=Unattached, est_monthly_usd=0.36",
+        "proposed_remediation": "DELETE FROM azure.compute.disks WHERE subscription_id = 'd0a7d0c1-76bf-404f-bc48-ce42346fd01b' AND id = '/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/OAPE-DEMO-RG/providers/Microsoft.Compute/disks/oape-demo-orphan-disk';",
+        "query_id": "finops/azure_unattached_disks",
+        "monthly_cost_estimate_usd": 0.36
+      },
+      {
+        "provider": "azure",
+        "resource": "/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/XOPS-DEV-RG/providers/Microsoft.Compute/disks/xops-dev-orphan-disk",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Managed disk is unattached",
+        "evidence": "finops/azure_unattached_disks: name=xops-dev-orphan-disk, id=/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/XOPS-DEV-RG/providers/Microsoft.Compute/disks/xops-dev-orphan-disk, location=eastus2, disk_size_gb=4, sku=Standard_LRS, disk_state=Unattached, est_monthly_usd=0.18",
+        "proposed_remediation": "DELETE FROM azure.compute.disks WHERE subscription_id = 'd0a7d0c1-76bf-404f-bc48-ce42346fd01b' AND id = '/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/XOPS-DEV-RG/providers/Microsoft.Compute/disks/xops-dev-orphan-disk';",
+        "query_id": "finops/azure_unattached_disks",
+        "monthly_cost_estimate_usd": 0.18
+      },
+      {
+        "provider": "azure",
+        "resource": "/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/oape-demo-rg/providers/Microsoft.Network/publicIPAddresses/oape-demo-orphan-pip",
+        "finding_type": "unassociated_ip",
+        "severity": "low",
+        "title": "Public IP has no IP configuration",
+        "evidence": "finops/azure_unassociated_public_ips: name=oape-demo-orphan-pip, id=/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/oape-demo-rg/providers/Microsoft.Network/publicIPAddresses/oape-demo-orphan-pip, location=eastus2, ip_address=20.242.89.84, sku=Standard, allocation_method=Static, est_monthly_usd=3.65",
+        "proposed_remediation": "DELETE FROM azure.network.public_ip_addresses WHERE subscription_id = 'd0a7d0c1-76bf-404f-bc48-ce42346fd01b' AND id = '/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/oape-demo-rg/providers/Microsoft.Network/publicIPAddresses/oape-demo-orphan-pip';",
+        "query_id": "finops/azure_unassociated_public_ips",
+        "monthly_cost_estimate_usd": 3.65
+      },
+      {
+        "provider": "azure",
+        "resource": "/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/xops-dev-rg/providers/Microsoft.Network/publicIPAddresses/xops-dev-orphan-pip",
+        "finding_type": "unassociated_ip",
+        "severity": "low",
+        "title": "Public IP has no IP configuration",
+        "evidence": "finops/azure_unassociated_public_ips: name=xops-dev-orphan-pip, id=/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/xops-dev-rg/providers/Microsoft.Network/publicIPAddresses/xops-dev-orphan-pip, location=eastus2, ip_address=20.119.241.171, sku=Standard, allocation_method=Static, est_monthly_usd=3.65",
+        "proposed_remediation": "DELETE FROM azure.network.public_ip_addresses WHERE subscription_id = 'd0a7d0c1-76bf-404f-bc48-ce42346fd01b' AND id = '/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/xops-dev-rg/providers/Microsoft.Network/publicIPAddresses/xops-dev-orphan-pip';",
+        "query_id": "finops/azure_unassociated_public_ips",
+        "monthly_cost_estimate_usd": 3.65
+      },
+      {
+        "provider": "google",
+        "resource": "oape-demo-orphan-disk",
+        "finding_type": "unattached_volume",
+        "severity": "low",
+        "title": "Persistent disk is ready but has no users",
+        "evidence": "finops/google_unattached_disks: name=oape-demo-orphan-disk, zone=https://www.googleapis.com/compute/v1/projects/stackql-demo/zones/us-central1-a, size_gb=10, type=https://www.googleapis.com/compute/v1/projects/stackql-demo/zones/us-central1-a/diskTypes/pd-standard, status=READY, est_monthly_usd=0.4",
+        "proposed_remediation": "DELETE FROM google.compute.disks WHERE project = 'stackql-demo' AND name = 'oape-demo-orphan-disk';",
+        "query_id": "finops/google_unattached_disks",
+        "monthly_cost_estimate_usd": 0.4
+      },
+      {
+        "provider": "google",
+        "resource": "my-clickops-disk-01-us-central1-20240607205253-vhahc7mr",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=my-clickops-disk-01-us-central1-20240607205253-vhahc7mr, storage_gb=0, created=2024-06-07T13:52:54.056-07:00, age_days=837, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'my-clickops-disk-01-us-central1-20240607205253-vhahc7mr';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260307203709-anq800ps",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260307203709-anq800ps, storage_gb=1.15, created=2026-03-07T12:37:10.738-08:00, age_days=199, est_monthly_usd=0.03",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260307203709-anq800ps';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.03
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260308193709-npzcz254",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260308193709-npzcz254, storage_gb=0.07, created=2026-03-08T12:37:10.916-07:00, age_days=198, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260308193709-npzcz254';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260309193709-5604uwq0",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260309193709-5604uwq0, storage_gb=0.18, created=2026-03-09T12:37:10.565-07:00, age_days=197, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260309193709-5604uwq0';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260310193709-xhcgoeyk",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260310193709-xhcgoeyk, storage_gb=0.07, created=2026-03-10T12:37:10.672-07:00, age_days=196, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260310193709-xhcgoeyk';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260311193709-d4cy7zw9",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260311193709-d4cy7zw9, storage_gb=0.08, created=2026-03-11T12:37:10.560-07:00, age_days=195, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260311193709-d4cy7zw9';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260312193709-m2bi8c9y",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260312193709-m2bi8c9y, storage_gb=0.07, created=2026-03-12T12:37:10.986-07:00, age_days=194, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260312193709-m2bi8c9y';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260313193709-iczut0sb",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260313193709-iczut0sb, storage_gb=0.16, created=2026-03-13T12:37:10.526-07:00, age_days=193, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260313193709-iczut0sb';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260314193709-vdwqehw4",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260314193709-vdwqehw4, storage_gb=0.07, created=2026-03-14T12:37:10.820-07:00, age_days=192, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260314193709-vdwqehw4';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260315193709-49x42f6v",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260315193709-49x42f6v, storage_gb=0.07, created=2026-03-15T12:37:10.483-07:00, age_days=191, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260315193709-49x42f6v';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260316193709-4tjccrpu",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260316193709-4tjccrpu, storage_gb=0.26, created=2026-03-16T12:37:10.455-07:00, age_days=190, est_monthly_usd=0.01",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260316193709-4tjccrpu';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.01
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260317193709-3cytqdoh",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260317193709-3cytqdoh, storage_gb=0.08, created=2026-03-17T12:37:10.527-07:00, age_days=189, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260317193709-3cytqdoh';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260318193709-qbh42lbx",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260318193709-qbh42lbx, storage_gb=0.07, created=2026-03-18T12:37:10.881-07:00, age_days=188, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260318193709-qbh42lbx';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260319193709-qnwnkopi",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260319193709-qnwnkopi, storage_gb=0.07, created=2026-03-19T12:37:11.084-07:00, age_days=187, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260319193709-qnwnkopi';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20251217-0-australia-southea-20260320193709-oeoqmcga",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20251217-0-australia-southea-20260320193709-oeoqmcga, storage_gb=0.07, created=2026-03-20T12:37:10.459-07:00, age_days=186, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20251217-0-australia-southea-20260320193709-oeoqmcga';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260615-0-australia-southea-20260615193709-g8njpi5j",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260615-0-australia-southea-20260615193709-g8njpi5j, storage_gb=0.91, created=2026-06-15T12:37:11.054-07:00, age_days=99, est_monthly_usd=0.02",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260615-0-australia-southea-20260615193709-g8njpi5j';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.02
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260617193709-vp5ue8mu",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260617193709-vp5ue8mu, storage_gb=0.91, created=2026-06-17T12:37:12.117-07:00, age_days=97, est_monthly_usd=0.02",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260617193709-vp5ue8mu';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.02
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260618193709-9o9o5xct",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260618193709-9o9o5xct, storage_gb=0.08, created=2026-06-18T12:37:11.573-07:00, age_days=96, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260618193709-9o9o5xct';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260619193709-ernr5oeo",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260619193709-ernr5oeo, storage_gb=0.06, created=2026-06-19T12:37:12.114-07:00, age_days=95, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260619193709-ernr5oeo';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260620193709-7ry4j0fv",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260620193709-7ry4j0fv, storage_gb=0.05, created=2026-06-20T12:37:11.150-07:00, age_days=94, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260620193709-7ry4j0fv';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260621193709-xeouqkvf",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260621193709-xeouqkvf, storage_gb=0.06, created=2026-06-21T12:37:11.111-07:00, age_days=93, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260621193709-xeouqkvf';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260622193709-xqhnr0r2",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260622193709-xqhnr0r2, storage_gb=0.32, created=2026-06-22T12:37:11.623-07:00, age_days=92, est_monthly_usd=0.01",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260622193709-xqhnr0r2';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.01
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260623193709-9ufm6mz9",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260623193709-9ufm6mz9, storage_gb=0.06, created=2026-06-23T12:37:11.074-07:00, age_days=91, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260623193709-9ufm6mz9';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      },
+      {
+        "provider": "google",
+        "resource": "instance-20260617-1-australia-southea-20260624193709-0qlgu5f7",
+        "finding_type": "stale_snapshot",
+        "severity": "info",
+        "title": "Stale snapshot remains stored",
+        "evidence": "finops/google_stale_snapshots: name=instance-20260617-1-australia-southea-20260624193709-0qlgu5f7, storage_gb=0.06, created=2026-06-24T12:37:11.065-07:00, age_days=90, est_monthly_usd=0",
+        "proposed_remediation": "DELETE FROM google.compute.snapshots WHERE project = 'stackql-demo' AND name = 'instance-20260617-1-australia-southea-20260624193709-0qlgu5f7';",
+        "query_id": "finops/google_stale_snapshots",
+        "monthly_cost_estimate_usd": 0.0
+      }
+    ],
+    "summary": "The sweep found idle storage and IP resources across AWS, Azure, and Google Cloud, plus several stale Google snapshots. Most findings are low-dollar items, with the largest recurring costs coming from unassociated public IPs and the gp3 EBS volume. The AWS stale snapshots query returned no results."
+  },
+  "assessments": [],
+  "executive_summary": "",
+  "artifacts": [],
+  "ledger": {
+    "scenario": "finops",
+    "trace_id": "trace_4216dcdbb5c54b2f9f1be3af4f9121e5",
+    "trace_url": "https://platform.openai.com/traces/trace?trace_id=trace_4216dcdbb5c54b2f9f1be3af4f9121e5",
+    "started_at": "2026-09-22T10:48:07.747216+00:00",
+    "duration_s": 54.745396,
+    "total_cost_usd": 0.049492,
+    "entries": [
+      {
+        "label": "sweep (classify)",
+        "model": "gpt-5.4-mini",
+        "requests": 2,
+        "input_tokens": 12259,
+        "cached_tokens": 5120,
+        "output_tokens": 9723,
+        "reasoning_tokens": 346,
+        "tool_calls": 8,
+        "select_calls": 8,
+        "mutation_calls": 0,
+        "tool_names": {
+          "run_select_query": 8
+        },
+        "cost_usd": 0.04949175
+      }
+    ],
+    "notes": []
+  }
+}

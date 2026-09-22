@@ -1,0 +1,50 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM azure.storage.storage_accounts
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ storage_account_name }}'
+
+/*+ create */
+INSERT INTO azure.storage.storage_accounts(
+  account_name,
+  resource_group_name,
+  subscription_id,
+  kind,
+  location,
+  sku,
+  properties,
+  tags
+)
+SELECT
+  '{{ storage_account_name }}',
+  '{{ resource_group_name }}',
+  '{{ subscription_id }}',
+  'StorageV2',
+  '{{ location }}',
+  '{"name": "Standard_LRS"}',
+  '{"accessTier": "Hot", "allowBlobPublicAccess": true, "minimumTlsVersion": "TLS1_2", "supportsHttpsTrafficOnly": true}',
+  '{{ global_tags }}'
+
+/*+ statecheck, retries=12, retry_delay=6 */
+SELECT COUNT(*) AS count FROM azure.storage.storage_accounts
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ storage_account_name }}'
+AND provisioning_state = 'Succeeded'
+AND allow_blob_public_access IN (1, '1', 'true')
+
+/*+ update */
+UPDATE azure.storage.storage_accounts
+SET properties = '{"allowBlobPublicAccess": true}'
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND account_name = '{{ storage_account_name }}'
+
+/*+ exports */
+SELECT '{{ storage_account_name }}' AS storage_account_name
+
+/*+ delete */
+DELETE FROM azure.storage.storage_accounts
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND account_name = '{{ storage_account_name }}'

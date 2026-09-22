@@ -1,0 +1,87 @@
+# Azure seed as a stackql-deploy stack (dogfooding: the misconfigurations are planted with the
+# same SQL interface the agents use to find them).
+#
+# Plants, all tagged purpose=oape-demo in one resource group:
+#   nsg               - an inbound Allow rule any/any from any source (cspm)
+#   storage_account   - allowBlobPublicAccess=true (cspm)
+#   orphan_disk       - a managed disk attached to nothing (finops)
+#   orphan_public_ip  - a Standard static public IP associated with nothing (finops)
+#
+# Not planted (recorded in WORK_ORDER.md): an Owner role assignment at subscription scope. The
+# demo service principal holds Contributor, which cannot write role assignments. The detection
+# query surfaces the Owner assignments that already exist at subscription scope instead.
+#
+# Build:    stackql-deploy build seed/azure dev --env-file .env
+# Teardown: stackql-deploy teardown seed/azure dev --env-file .env   (deletes the resource group)
+version: 1
+name: oape-demo
+description: deliberately misconfigured Azure demo estate for openai-agentic-platform-engineering
+providers:
+  - azure::v26.07.00420
+globals:
+  - name: subscription_id
+    value: "{{ AZURE_SUBSCRIPTION_ID }}"
+  - name: location
+    value: "{{ AZURE_LOCATION }}"
+  - name: name_suffix
+    description: first 8 chars of the subscription id for the globally unique storage account name
+    value: '{{ AZURE_SUBSCRIPTION_ID | truncate(length=8, end="") }}'
+  - name: global_tags
+    value:
+      purpose: oape-demo
+      managed-by: stackql-deploy
+      stackName: "{{ stack_name }}"
+      stackEnv: "{{ stack_env }}"
+resources:
+  - name: resource_group
+    props:
+      - name: resource_group_name
+        value: "{{ stack_name }}-rg"
+    exports:
+      - resource_group_name
+
+  - name: nsg
+    description: planted - AllowAnyInbound any/any from any source
+    props:
+      - name: nsg_name
+        value: "{{ stack_name }}-open-nsg"
+      - name: security_rules
+        value:
+          - name: AllowAnyInbound
+            properties:
+              access: Allow
+              protocol: "*"
+              direction: Inbound
+              priority: 100
+              sourceAddressPrefix: "*"
+              sourcePortRange: "*"
+              destinationAddressPrefix: "*"
+              destinationPortRange: "*"
+    exports:
+      - nsg_name
+
+  - name: storage_account
+    description: planted - public blob access allowed
+    props:
+      - name: storage_account_name
+        value: "oapedemopub{{ name_suffix }}"
+    exports:
+      - storage_account_name
+
+  - name: orphan_disk
+    description: planted finops finding - managed disk attached to nothing
+    props:
+      - name: disk_name
+        value: "{{ stack_name }}-orphan-disk"
+      - name: disk_size_gb
+        value: 8
+    exports:
+      - orphan_disk_id
+
+  - name: orphan_public_ip
+    description: planted finops finding - public ip associated with nothing
+    props:
+      - name: orphan_pip_name
+        value: "{{ stack_name }}-orphan-pip"
+    exports:
+      - orphan_public_ip_id

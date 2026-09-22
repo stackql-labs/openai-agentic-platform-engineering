@@ -1,0 +1,35 @@
+{
+  "recorded_at": "2026-09-22T11:00:00+00:00",
+  "synthetic": true,
+  "note": "No OpenAI Admin API key was available in the build tenancy (see WORK_ORDER.md), so this fallback was authored by hand to the shape the seeded org produces: two throwaway projects and one service account key. Replace it with `make record-fallbacks` once OPENAI_ADMIN_KEY is set.",
+  "brief": {
+    "org_summary": "The organization has three active projects. Two of them, oape-demo-checkout and oape-demo-batch, were created today by the demo seed and carry no usage. One service account key exists in oape-demo-checkout; it is 0 days old and has never been used, which is over the demo threshold of 0 days.",
+    "projects": [
+      {"project": "oape-demo-checkout", "status": "active", "keys": 1, "service_accounts": 1, "spend_usd": 0.0, "note": "seeded today; one unused service account key"},
+      {"project": "oape-demo-batch", "status": "active", "keys": 0, "service_accounts": 0, "spend_usd": 0.0, "note": "seeded today; no keys, no usage"},
+      {"project": "platform-agents", "status": "active", "keys": 2, "service_accounts": 0, "spend_usd": 4.31, "note": "the project the sweep agents run in; spend is the sweeps themselves"}
+    ],
+    "key_findings": [
+      {"project": "oape-demo-checkout", "owner": "service account oape-demo-ci-service-account", "key_or_account": "key_...redacted", "age_days": 0, "last_used": "never", "recommendation": "delete the key or bind it to the pipeline that needs it; an unused service account key is standing credential with no owner"}
+    ],
+    "spend_summary": "Spend in the 30 day window is USD 4.31, all of it in platform-agents and all of it the sweep and triage runs in this demo. The two seeded projects have consumed nothing.",
+    "actions": [
+      "Delete the unused service account key in oape-demo-checkout, or move it into the CI pipeline's secret store and record an owner.",
+      "Archive oape-demo-batch: it has no keys and no usage after seeding.",
+      "Set a key age policy of 90 days for service accounts and let this sweep enforce it on a schedule.",
+      "Keep spend attribution per project: the agents' own consumption is visible here in the same brief that governs everything else."
+    ]
+  },
+  "ledger": {
+    "scenario": "openai_estate",
+    "trace_id": null,
+    "trace_url": null,
+    "started_at": "2026-09-22T11:00:00+00:00",
+    "duration_s": 38.0,
+    "total_cost_usd": 0.0138,
+    "entries": [
+      {"label": "estate sweep (synthetic)", "model": "gpt-5.4-mini", "requests": 5, "input_tokens": 14200, "cached_tokens": 8192, "output_tokens": 1650, "reasoning_tokens": 210, "tool_calls": 6, "select_calls": 5, "mutation_calls": 0, "tool_names": {"render_query": 1, "run_select_query": 5}}
+    ],
+    "notes": ["synthetic fallback: numbers are representative of a mini-tier run, not measured"]
+  }
+}

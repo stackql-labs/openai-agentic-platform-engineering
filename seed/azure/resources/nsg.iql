@@ -1,0 +1,33 @@
+/*+ createorupdate */
+INSERT INTO azure.network.network_security_groups(
+   network_security_group_name,
+   resource_group_name,
+   subscription_id,
+   location,
+   properties,
+   tags
+)
+SELECT
+   '{{ nsg_name }}',
+   '{{ resource_group_name }}',
+   '{{ subscription_id }}',
+   '{{ location }}',
+   '{"securityRules": {{ security_rules }}}',
+   '{{ global_tags }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) AS count FROM azure.network.network_security_groups
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ nsg_name }}'
+AND provisioning_state = 'Succeeded'
+AND json_array_length(security_rules) = {{ security_rules | from_json | length }}
+
+/*+ exports */
+SELECT '{{ nsg_name }}' AS nsg_name
+
+/*+ delete */
+DELETE FROM azure.network.network_security_groups
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND network_security_group_name = '{{ nsg_name }}'

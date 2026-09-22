@@ -1,0 +1,665 @@
+{
+  "recorded_at": "2026-09-22T10:59:57.192220+00:00",
+  "findings": {
+    "scenario": "cspm",
+    "findings": [
+      {
+        "provider": "aws",
+        "resource": "oape-demo-public-824532806693",
+        "finding_type": "s3_public_access_block_disabled",
+        "severity": "medium",
+        "title": "S3 bucket-level public access block is disabled",
+        "evidence": "cspm/aws_s3_public_access_block_disabled: bucket=oape-demo-public-824532806693, public_access_block=disabled, block_public_acls=false, ignore_public_acls=false, block_public_policy=false, restrict_public_buckets=false",
+        "proposed_remediation": "Enable all four bucket-level public access block settings for the bucket, e.g. create/update aws.s3.public_access_block for bucket 'oape-demo-public-824532806693' with block_public_acls=true, ignore_public_acls=true, block_public_policy=true, restrict_public_buckets=true.",
+        "query_id": "cspm/aws_s3_public_access_block_disabled",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "sg-0b11df35676da47aa",
+        "finding_type": "security_group_ingress_exposure",
+        "severity": "high",
+        "title": "Security group allows SSH from the internet",
+        "evidence": "cspm/aws_security_group_ingress_exposure: group_id=sg-0b11df35676da47aa, group_name=oape-demo-open-ssh, protocol=tcp, from_port=22, to_port=22, open_to_world=1",
+        "proposed_remediation": "Restrict the ingress rule on sg-0b11df35676da47aa so port 22 is limited to approved source CIDRs, or delete the 0.0.0.0/0 ingress rule.",
+        "query_id": "cspm/aws_security_group_ingress_exposure",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "sg-07d3754577c36eeac",
+        "finding_type": "security_group_ingress_exposure",
+        "severity": "high",
+        "title": "Security group allows SSH from the internet",
+        "evidence": "cspm/aws_security_group_ingress_exposure: group_id=sg-07d3754577c36eeac, group_name=launch-wizard, protocol=tcp, from_port=22, to_port=22, open_to_world=1",
+        "proposed_remediation": "Restrict the ingress rule on sg-07d3754577c36eeac so port 22 is limited to approved source CIDRs, or delete the 0.0.0.0/0 ingress rule.",
+        "query_id": "cspm/aws_security_group_ingress_exposure",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "sg-0e75e7b44a7eb035d",
+        "finding_type": "security_group_ingress_exposure",
+        "severity": "high",
+        "title": "Security group allows SSH from the internet",
+        "evidence": "cspm/aws_security_group_ingress_exposure: group_id=sg-0e75e7b44a7eb035d, group_name=launch-wizard-1, protocol=tcp, from_port=22, to_port=22, open_to_world=1",
+        "proposed_remediation": "Restrict the ingress rule on sg-0e75e7b44a7eb035d so port 22 is limited to approved source CIDRs, or delete the 0.0.0.0/0 ingress rule.",
+        "query_id": "cspm/aws_security_group_ingress_exposure",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "sg-07d9f2886cd5471e4",
+        "finding_type": "security_group_ingress_exposure",
+        "severity": "high",
+        "title": "Security group allows SSH from the internet",
+        "evidence": "cspm/aws_security_group_ingress_exposure: group_id=sg-07d9f2886cd5471e4, group_name=ElasticMapReduce-master, protocol=tcp, from_port=22, to_port=22, open_to_world=1",
+        "proposed_remediation": "Restrict the ingress rule on sg-07d9f2886cd5471e4 so port 22 is limited to approved source CIDRs, or delete the 0.0.0.0/0 ingress rule.",
+        "query_id": "cspm/aws_security_group_ingress_exposure",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "sg-069738c516b863735",
+        "finding_type": "security_group_ingress_exposure",
+        "severity": "high",
+        "title": "Security group allows SSH from the internet",
+        "evidence": "cspm/aws_security_group_ingress_exposure: group_id=sg-069738c516b863735, group_name=launch-wizard-2, protocol=tcp, from_port=22, to_port=22, open_to_world=1",
+        "proposed_remediation": "Restrict the ingress rule on sg-069738c516b863735 so port 22 is limited to approved source CIDRs, or delete the 0.0.0.0/0 ingress rule.",
+        "query_id": "cspm/aws_security_group_ingress_exposure",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "oape-demo-db",
+        "finding_type": "rds_unencrypted",
+        "severity": "high",
+        "title": "RDS instance storage is not encrypted at rest",
+        "evidence": "cspm/aws_rds_unencrypted: db_instance_identifier=oape-demo-db, engine=postgres, db_instance_class=db.t4g.micro, storage_encrypted=false, publicly_accessible=false",
+        "proposed_remediation": "Restore or recreate the DB instance with encryption enabled; in AWS terms this means creating an encrypted snapshot/restore target or a replacement RDS instance with storage encryption turned on.",
+        "query_id": "cspm/aws_rds_unencrypted",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "i-092070370532713e1",
+        "finding_type": "ebs_volume_unencrypted_on_internet_facing_instance",
+        "severity": "high",
+        "title": "Unencrypted volume is attached to an instance with a public IP",
+        "evidence": "cspm/aws_unencrypted_volumes_on_internet_facing_instances: volume_id=vol-0db93b45314f35f17, instance_id=i-092070370532713e1, public_ip_address=3.106.121.108, size_gb=8",
+        "proposed_remediation": "Replace the volume with an encrypted copy, or snapshot and reattach an encrypted volume to instance i-092070370532713e1.",
+        "query_id": "cspm/aws_unencrypted_volumes_on_internet_facing_instances",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "i-0517d8a0a4e51df18",
+        "finding_type": "ebs_volume_unencrypted_on_internet_facing_instance",
+        "severity": "high",
+        "title": "Unencrypted volume is attached to an instance with a public IP",
+        "evidence": "cspm/aws_unencrypted_volumes_on_internet_facing_instances: volume_id=vol-0b3bd030d07342a8c, instance_id=i-0517d8a0a4e51df18, public_ip_address=32.236.243.206, size_gb=8",
+        "proposed_remediation": "Replace the volume with an encrypted copy, or snapshot and reattach an encrypted volume to instance i-0517d8a0a4e51df18.",
+        "query_id": "cspm/aws_unencrypted_volumes_on_internet_facing_instances",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "i-090f75449fcbffd62",
+        "finding_type": "ebs_volume_unencrypted_on_internet_facing_instance",
+        "severity": "high",
+        "title": "Unencrypted volume is attached to an instance with a public IP",
+        "evidence": "cspm/aws_unencrypted_volumes_on_internet_facing_instances: volume_id=vol-091aee0a3d418df6c, instance_id=i-090f75449fcbffd62, public_ip_address=3.107.40.23, size_gb=8",
+        "proposed_remediation": "Replace the volume with an encrypted copy, or snapshot and reattach an encrypted volume to instance i-090f75449fcbffd62.",
+        "query_id": "cspm/aws_unencrypted_volumes_on_internet_facing_instances",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "us-east-1",
+        "finding_type": "cloudtrail_region_missing",
+        "severity": "medium",
+        "title": "Enabled region has no visible CloudTrail trail",
+        "evidence": "cspm/aws_regions_without_cloudtrail: region=us-east-1, trails=0",
+        "proposed_remediation": "Create or enable a CloudTrail trail that covers us-east-1, or confirm a multi-region trail is present and visible in the account.",
+        "query_id": "cspm/aws_regions_without_cloudtrail",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "azure",
+        "resource": "/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/oape-demo-rg/providers/Microsoft.Storage/storageAccounts/oapedemopubd0a7d0c1",
+        "finding_type": "storage_account_public_blob_access",
+        "severity": "critical",
+        "title": "Storage account allows anonymous public blob access",
+        "evidence": "cspm/azure_storage_public_blob_access: name=oapedemopubd0a7d0c1, location=eastus2, allow_blob_public_access=true",
+        "proposed_remediation": "Set allowBlobPublicAccess to false on storage account oapedemopubd0a7d0c1 and remove any anonymous blob container ACLs.",
+        "query_id": "cspm/azure_storage_public_blob_access",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "azure",
+        "resource": "/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/resourceGroups/oape-demo-rg/providers/Microsoft.Network/networkSecurityGroups/oape-demo-open-nsg",
+        "finding_type": "nsg_inbound_exposure",
+        "severity": "high",
+        "title": "NSG allows inbound traffic from the internet",
+        "evidence": "cspm/azure_nsg_inbound_exposure: nsg=oape-demo-open-nsg, rule=AllowAnyInbound, direction=Inbound, access=Allow, source=*, port=*, from_internet=1",
+        "proposed_remediation": "Remove or tighten the inbound allow rule on oape-demo-open-nsg so the source is limited to approved prefixes instead of *.",
+        "query_id": "cspm/azure_nsg_inbound_exposure",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "azure",
+        "resource": "/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b",
+        "finding_type": "owner_assignment_subscription_scope",
+        "severity": "high",
+        "title": "Owner role is assigned directly at subscription scope",
+        "evidence": "cspm/azure_owner_assignments_subscription_scope: assignment_id=/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b/providers/Microsoft.Authorization/roleAssignments/fdf3b393-76c6-4687-8311-849f5dc27dd8, principal_id=396cc8ea-e297-4b2e-a9c8-44b375741f2f, principal_type=User, scope=/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b",
+        "proposed_remediation": "Remove the direct subscription-scope Owner role assignment and replace it with the least-privilege role needed for the user.",
+        "query_id": "cspm/azure_owner_assignments_subscription_scope",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "google",
+        "resource": "oape-demo-public-stackql-demo",
+        "finding_type": "gcs_public_iam_binding",
+        "severity": "critical",
+        "title": "Bucket grants public IAM access",
+        "evidence": "cspm/google_bucket_public_bindings: bucket=oape-demo-public-stackql-demo, role=roles/storage.objectViewer, members=[\"allUsers\"]",
+        "proposed_remediation": "Remove the allUsers member from the bucket IAM policy, e.g. delete the public binding on roles/storage.objectViewer.",
+        "query_id": "cspm/google_bucket_public_bindings",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "github",
+        "resource": "oape-demo-checkout",
+        "finding_type": "github_unprotected_default_branch",
+        "severity": "medium",
+        "title": "Default branch is unprotected",
+        "evidence": "cspm/github_unprotected_default_branches: repo=oape-demo-checkout, branch=main, protected=false",
+        "proposed_remediation": "Enable branch protection on main for oape-demo-checkout, requiring reviews and preventing direct pushes.",
+        "query_id": "cspm/github_unprotected_default_branches",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "github",
+        "resource": "oape-demo-findings",
+        "finding_type": "github_unprotected_default_branch",
+        "severity": "medium",
+        "title": "Default branch is unprotected",
+        "evidence": "cspm/github_unprotected_default_branches: repo=oape-demo-findings, branch=main, protected=false",
+        "proposed_remediation": "Enable branch protection on main for oape-demo-findings, requiring reviews and preventing direct pushes.",
+        "query_id": "cspm/github_unprotected_default_branches",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "github",
+        "resource": "oape-demo-checkout",
+        "finding_type": "github_deploy_key",
+        "severity": "low",
+        "title": "Deploy key is present at the freshness threshold",
+        "evidence": "cspm/github_deploy_keys: repo=oape-demo-checkout, key_id=164064620, title=oape-demo-legacy-deploy-key, age_days=0, read_only=false",
+        "proposed_remediation": "Remove the deploy key if it is no longer required, or rotate it and store it as read-only if write access is unnecessary.",
+        "query_id": "cspm/github_deploy_keys",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "AKIA376P4FQS47OOUULV",
+        "finding_type": "iam_user_access_key_exposed_with_admin",
+        "severity": "critical",
+        "title": "Administrator user has an active access key",
+        "evidence": "cspm/aws_iam_user_access_keys: user_name=jeffrey.aven, access_key_id=AKIA376P4FQS47OOUULV, status=Active, age_days=1510",
+        "proposed_remediation": "Deactivate and delete access key AKIA376P4FQS47OOUULV for user jeffrey.aven, or remove AdministratorAccess from the user if the key must remain.",
+        "query_id": "cspm/aws_iam_user_access_keys",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "AKIA376P4FQSRBCBERLL",
+        "finding_type": "iam_user_access_key_exposed_with_admin",
+        "severity": "critical",
+        "title": "Administrator user has an active access key",
+        "evidence": "cspm/aws_iam_user_access_keys: user_name=jeffrey.aven, access_key_id=AKIA376P4FQSRBCBERLL, status=Active, age_days=950",
+        "proposed_remediation": "Deactivate and delete access key AKIA376P4FQSRBCBERLL for user jeffrey.aven, or remove AdministratorAccess from the user if the key must remain.",
+        "query_id": "cspm/aws_iam_user_access_keys",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "AKIA376P4FQSS2ONB2NS",
+        "finding_type": "iam_user_access_key_exposed_with_admin",
+        "severity": "critical",
+        "title": "Administrator user has an active access key",
+        "evidence": "cspm/aws_iam_user_access_keys: user_name=kieran.rimmer, access_key_id=AKIA376P4FQSS2ONB2NS, status=Active, age_days=1608",
+        "proposed_remediation": "Deactivate and delete access key AKIA376P4FQSS2ONB2NS for user kieran.rimmer, or remove AdministratorAccess from the user if the key must remain.",
+        "query_id": "cspm/aws_iam_user_access_keys",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "AKIA376P4FQSWYJ55A7O",
+        "finding_type": "iam_user_access_key_exposed_with_admin",
+        "severity": "critical",
+        "title": "Administrator user has an active access key",
+        "evidence": "cspm/aws_iam_user_access_keys: user_name=oape-demo-admin-user, access_key_id=AKIA376P4FQSWYJ55A7O, status=Active, age_days=0",
+        "proposed_remediation": "Deactivate and delete access key AKIA376P4FQSWYJ55A7O for user oape-demo-admin-user, or remove AdministratorAccess from the user if the key must remain.",
+        "query_id": "cspm/aws_iam_user_access_keys",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "AKIA376P4FQSVCMYBQ7Y",
+        "finding_type": "iam_user_access_key_exposed_with_admin",
+        "severity": "critical",
+        "title": "Administrator user has an active access key",
+        "evidence": "cspm/aws_iam_user_access_keys: user_name=stackql, access_key_id=AKIA376P4FQSVCMYBQ7Y, status=Active, age_days=455",
+        "proposed_remediation": "Deactivate and delete access key AKIA376P4FQSVCMYBQ7Y for user stackql, or remove AdministratorAccess from the user if the key must remain.",
+        "query_id": "cspm/aws_iam_user_access_keys",
+        "monthly_cost_estimate_usd": null
+      }
+    ],
+    "summary": "The sweep found multiple high-impact exposures across AWS, Azure, Google Cloud, and GitHub. The most urgent issues are public blob access in Azure, public GCS IAM bindings, and several active AWS administrator access keys. There are also internet-exposed SSH security groups, unencrypted AWS storage resources, missing CloudTrail coverage in regions, and unprotected GitHub default branches."
+  },
+  "assessments": [
+    {
+      "finding_fingerprint": "73d3e4f457",
+      "material": true,
+      "rationale": "The security group sg-0b11df35676da47aa allows TCP/22 from 0.0.0.0/0, exposing SSH management access to internet scanning and brute-force attempts. This is part of a broader pattern of open SSH security groups in the same AWS account, increasing the likelihood that at least one attached host is reachable.",
+      "correlated_fingerprints": [
+        "801065a900",
+        "917649eb31",
+        "173590bf5a",
+        "5f059314bc"
+      ],
+      "remediation_plan": "1. Confirm which ENIs/instances use sg-0b11df35676da47aa and whether SSH is still required. 2. Capture the existing ingress rule for rollback. 3. Revoke only the TCP/22 0.0.0.0/0 ingress rule, or replace it with a known approved bastion/VPN CIDR. 4. Validate required access through the approved path and monitor rejected connection attempts.",
+      "remediation_sql": "DELETE FROM aws.ec2.security_group_rules\nWHERE region = 'ap-southeast-2'\n  AND group_id = 'sg-0b11df35676da47aa'\n  AND ip_protocol = 'tcp'\n  AND from_port = 22\n  AND to_port = 22\n  AND cidr_ipv4 = '0.0.0.0/0';",
+      "blast_radius": "Only inbound SSH access governed by this specific security group rule is affected; existing established sessions may drop and administrators using direct internet SSH will need the approved access path."
+    },
+    {
+      "finding_fingerprint": "801065a900",
+      "material": true,
+      "rationale": "The security group sg-07d3754577c36eeac allows TCP/22 from the public internet. The launch-wizard naming suggests it may be an ad hoc instance group, and it correlates with several other open SSH groups in the same account.",
+      "correlated_fingerprints": [
+        "73d3e4f457",
+        "917649eb31",
+        "173590bf5a",
+        "5f059314bc"
+      ],
+      "remediation_plan": "1. Identify resources attached to sg-07d3754577c36eeac. 2. Record the current ingress rule for rollback. 3. Remove the 0.0.0.0/0 TCP/22 rule or replace it with approved administration CIDRs. 4. Test administrative connectivity through the intended bastion, VPN, or SSM path.",
+      "remediation_sql": "DELETE FROM aws.ec2.security_group_rules\nWHERE region = 'ap-southeast-2'\n  AND group_id = 'sg-07d3754577c36eeac'\n  AND ip_protocol = 'tcp'\n  AND from_port = 22\n  AND to_port = 22\n  AND cidr_ipv4 = '0.0.0.0/0';",
+      "blast_radius": "Only resources using sg-07d3754577c36eeac lose direct internet SSH; other ports and other security groups are unchanged."
+    },
+    {
+      "finding_fingerprint": "917649eb31",
+      "material": true,
+      "rationale": "The security group sg-0e75e7b44a7eb035d exposes SSH to 0.0.0.0/0, which is a directly exploitable management-plane exposure if any member host has weak or compromised credentials. It is one of multiple open SSH groups, so remediation should be handled as a common hardening task across the account.",
+      "correlated_fingerprints": [
+        "73d3e4f457",
+        "801065a900",
+        "173590bf5a",
+        "5f059314bc"
+      ],
+      "remediation_plan": "1. Check attached ENIs/instances for sg-0e75e7b44a7eb035d. 2. Save the current ingress rule parameters. 3. Revoke the public TCP/22 rule, or change it to an approved source prefix. 4. Confirm access via bastion, VPN, or AWS Systems Manager Session Manager.",
+      "remediation_sql": "DELETE FROM aws.ec2.security_group_rules\nWHERE region = 'ap-southeast-2'\n  AND group_id = 'sg-0e75e7b44a7eb035d'\n  AND ip_protocol = 'tcp'\n  AND from_port = 22\n  AND to_port = 22\n  AND cidr_ipv4 = '0.0.0.0/0';",
+      "blast_radius": "Direct SSH from arbitrary internet sources to instances using this group is removed; application traffic and unrelated groups are not changed."
+    },
+    {
+      "finding_fingerprint": "173590bf5a",
+      "material": true,
+      "rationale": "The ElasticMapReduce-master security group sg-07d9f2886cd5471e4 allows public SSH, exposing cluster master administration to the internet. Because EMR master nodes often have access to data and job credentials, this is material even if the cluster is temporary or demo-scoped.",
+      "correlated_fingerprints": [
+        "73d3e4f457",
+        "801065a900",
+        "917649eb31",
+        "5f059314bc"
+      ],
+      "remediation_plan": "1. Confirm the EMR cluster and operational SSH requirement. 2. Snapshot the existing security group rule for rollback. 3. Remove public TCP/22 ingress or restrict it to an approved administration CIDR. 4. Prefer SSM, a bastion, or private network access for cluster administration and validate job operations after the change.",
+      "remediation_sql": "DELETE FROM aws.ec2.security_group_rules\nWHERE region = 'ap-southeast-2'\n  AND group_id = 'sg-07d9f2886cd5471e4'\n  AND ip_protocol = 'tcp'\n  AND from_port = 22\n  AND to_port = 22\n  AND cidr_ipv4 = '0.0.0.0/0';",
+      "blast_radius": "Public SSH to EMR master resources using this security group is removed; EMR workload networking is otherwise unchanged unless it depends on this exact ingress rule."
+    },
+    {
+      "finding_fingerprint": "5f059314bc",
+      "material": true,
+      "rationale": "The security group sg-069738c516b863735 permits TCP/22 from 0.0.0.0/0, creating internet-facing administrative exposure. It correlates with the other open SSH security groups and should be remediated with the same least-access approach.",
+      "correlated_fingerprints": [
+        "73d3e4f457",
+        "801065a900",
+        "917649eb31",
+        "173590bf5a"
+      ],
+      "remediation_plan": "1. Identify all ENIs or instances attached to sg-069738c516b863735. 2. Preserve the current ingress rule details for rollback. 3. Revoke the public TCP/22 rule or replace it with approved source CIDRs. 4. Validate that administrators can still connect through the sanctioned access method.",
+      "remediation_sql": "DELETE FROM aws.ec2.security_group_rules\nWHERE region = 'ap-southeast-2'\n  AND group_id = 'sg-069738c516b863735'\n  AND ip_protocol = 'tcp'\n  AND from_port = 22\n  AND to_port = 22\n  AND cidr_ipv4 = '0.0.0.0/0';",
+      "blast_radius": "Only direct public SSH access through this security group is affected; rollback is re-adding the captured ingress rule."
+    },
+    {
+      "finding_fingerprint": "7ce61fd261",
+      "material": true,
+      "rationale": "The RDS instance oape-demo-db is a PostgreSQL database with storage encryption disabled, so data at rest is not protected by KMS-backed encryption. It is not publicly accessible, which reduces exposure, but lack of encryption remains material for data protection and compliance.",
+      "correlated_fingerprints": [],
+      "remediation_plan": "1. Schedule a maintenance window and confirm backups. 2. Create a snapshot of oape-demo-db, copy it to an encrypted snapshot using the approved KMS key, and restore a replacement encrypted DB instance. 3. Validate application connectivity and data integrity against the replacement. 4. Cut over endpoints or DNS, retain the original briefly for rollback, then decommission it.",
+      "remediation_sql": "-- RDS storage encryption is not enabled in place; review and adapt names before execution.\nINSERT INTO aws.rds.db_snapshots (region, db_instance_identifier, db_snapshot_identifier)\nVALUES ('ap-southeast-2', 'oape-demo-db', 'oape-demo-db-pre-encryption-snapshot');\n\nINSERT INTO aws.rds.db_snapshots (region, source_db_snapshot_identifier, target_db_snapshot_identifier, kms_key_id, encrypted)\nVALUES ('ap-southeast-2', 'oape-demo-db-pre-encryption-snapshot', 'oape-demo-db-encrypted-snapshot', 'alias/aws/rds', true);\n\nINSERT INTO aws.rds.db_instances (region, db_instance_identifier, db_snapshot_identifier, storage_encrypted)\nVALUES ('ap-southeast-2', 'oape-demo-db-encrypted', 'oape-demo-db-encrypted-snapshot', true);",
+      "blast_radius": "Creates replacement RDS resources and requires a database cutover; no in-place change touches the current instance until traffic is switched and the old instance is retired."
+    },
+    {
+      "finding_fingerprint": "6a78ef9df8",
+      "material": true,
+      "rationale": "Instance i-092070370532713e1 has a public IP and an attached unencrypted EBS volume vol-0db93b45314f35f17. The public IP raises the value of encrypting local disk data because compromise or snapshot exposure could disclose unencrypted contents.",
+      "correlated_fingerprints": [
+        "73d3e4f457",
+        "801065a900",
+        "917649eb31",
+        "173590bf5a",
+        "5f059314bc"
+      ],
+      "remediation_plan": "1. Confirm the volume device mapping and take an application-consistent backup. 2. Create a snapshot, copy it as encrypted, and create a replacement encrypted volume in the same AZ. 3. During a maintenance window, stop the instance if needed, detach the unencrypted volume, attach the encrypted replacement with the same device name, and boot/validate. 4. Keep the original volume briefly for rollback, then delete it after validation.",
+      "remediation_sql": "-- Review AZ, device name, and KMS key before execution.\nINSERT INTO aws.ec2.snapshots (region, volume_id, description)\nVALUES ('ap-southeast-2', 'vol-0db93b45314f35f17', 'pre-encryption snapshot for i-092070370532713e1');\n-- Then copy the snapshot encrypted and create/attach the encrypted replacement volume in the same AZ.",
+      "blast_radius": "Affects the single volume attached to i-092070370532713e1; replacement may require instance downtime, while retaining the old volume provides rollback."
+    },
+    {
+      "finding_fingerprint": "0c4b472d40",
+      "material": true,
+      "rationale": "Instance i-0517d8a0a4e51df18 is internet-facing via a public IP and has unencrypted volume vol-0b3bd030d07342a8c attached. Encryption cannot be enabled in place on an existing EBS volume, so a controlled encrypted replacement is required.",
+      "correlated_fingerprints": [
+        "73d3e4f457",
+        "801065a900",
+        "917649eb31",
+        "173590bf5a",
+        "5f059314bc"
+      ],
+      "remediation_plan": "1. Verify the attached device and create an application-consistent snapshot. 2. Copy the snapshot with encryption enabled using the approved KMS key. 3. Create a new encrypted volume in the same AZ and swap it during a maintenance window. 4. Validate the instance and retain the old volume temporarily for rollback.",
+      "remediation_sql": "-- Review AZ, device name, and KMS key before execution.\nINSERT INTO aws.ec2.snapshots (region, volume_id, description)\nVALUES ('ap-southeast-2', 'vol-0b3bd030d07342a8c', 'pre-encryption snapshot for i-0517d8a0a4e51df18');\n-- Then copy the snapshot encrypted and create/attach the encrypted replacement volume in the same AZ.",
+      "blast_radius": "Limited to the affected volume and instance i-0517d8a0a4e51df18; downtime may be required for a safe detach/attach."
+    },
+    {
+      "finding_fingerprint": "ea0a620cb7",
+      "material": true,
+      "rationale": "Instance i-090f75449fcbffd62 has a public IP and an attached unencrypted EBS volume vol-091aee0a3d418df6c. This is material because the instance is externally reachable and the disk lacks at-rest encryption protections.",
+      "correlated_fingerprints": [
+        "73d3e4f457",
+        "801065a900",
+        "917649eb31",
+        "173590bf5a",
+        "5f059314bc"
+      ],
+      "remediation_plan": "1. Confirm the volume role, device name, and AZ. 2. Snapshot the volume, copy the snapshot encrypted, and create a replacement encrypted volume. 3. Swap the volume during a maintenance window, preserving the original until validation completes. 4. After successful validation, remove the unencrypted volume and ensure EBS encryption by default is enabled for future volumes.",
+      "remediation_sql": "-- Review AZ, device name, and KMS key before execution.\nINSERT INTO aws.ec2.snapshots (region, volume_id, description)\nVALUES ('ap-southeast-2', 'vol-091aee0a3d418df6c', 'pre-encryption snapshot for i-090f75449fcbffd62');\n-- Then copy the snapshot encrypted and create/attach the encrypted replacement volume in the same AZ.",
+      "blast_radius": "Limited to the single affected EBS volume on i-090f75449fcbffd62; instance restart or downtime may be needed."
+    },
+    {
+      "finding_fingerprint": "3b2fe1023c",
+      "material": true,
+      "rationale": "The Azure storage account oapedemopubd0a7d0c1 allows anonymous public blob access at the account level. This is critical because any container with a permissive ACL can expose data publicly until account-level public access is disabled.",
+      "correlated_fingerprints": [],
+      "remediation_plan": "1. Inventory containers in oapedemopubd0a7d0c1 that rely on anonymous access. 2. Set allowBlobPublicAccess to false at the storage account level. 3. Remove any anonymous container ACLs and validate intended application access via private, SAS, or authenticated paths. 4. Monitor storage analytics for failed anonymous requests after the change.",
+      "remediation_sql": "UPDATE azure.storage.accounts\nSET allow_blob_public_access = false\nWHERE subscription_id = 'd0a7d0c1-76bf-404f-bc48-ce42346fd01b'\n  AND resource_group_name = 'oape-demo-rg'\n  AND account_name = 'oapedemopubd0a7d0c1';",
+      "blast_radius": "Disables anonymous blob access for the entire storage account; any consumers depending on public URLs will fail until moved to authenticated access."
+    },
+    {
+      "finding_fingerprint": "1ef76ea300",
+      "material": true,
+      "rationale": "The Azure NSG oape-demo-open-nsg has an inbound allow rule from * to * on all ports, which is a broad internet exposure. This is more severe than a single-port finding because any associated subnet or NIC can receive arbitrary inbound traffic subject only to host firewalls.",
+      "correlated_fingerprints": [],
+      "remediation_plan": "1. Identify NICs/subnets associated with oape-demo-open-nsg and confirm required inbound services. 2. Export the AllowAnyInbound rule for rollback. 3. Delete the broad rule or replace it with narrow allow rules for approved source prefixes and ports. 4. Validate application reachability and review NSG flow logs for denied unexpected traffic.",
+      "remediation_sql": "DELETE FROM azure.network.security_rules\nWHERE subscription_id = 'd0a7d0c1-76bf-404f-bc48-ce42346fd01b'\n  AND resource_group_name = 'oape-demo-rg'\n  AND network_security_group_name = 'oape-demo-open-nsg'\n  AND security_rule_name = 'AllowAnyInbound';",
+      "blast_radius": "All resources protected by oape-demo-open-nsg lose the blanket inbound allow rule; legitimate inbound access must be covered by more specific rules."
+    },
+    {
+      "finding_fingerprint": "e36569f451",
+      "material": true,
+      "rationale": "A human User principal has Owner directly at subscription scope, which is standing privileged access over the entire Azure subscription. This is a governance and privilege-management finding rather than evidence of an active incident, but it warrants removal or reduction.",
+      "correlated_fingerprints": [],
+      "remediation_plan": "1. Confirm the user\u2019s operational need and identify a lower-privilege role or eligible PIM assignment. 2. Add the replacement least-privilege or just-in-time access path first if required. 3. Remove the direct subscription-scope Owner assignment fdf3b393-76c6-4687-8311-849f5dc27dd8. 4. Verify the user retains only intended access.",
+      "remediation_sql": "DELETE FROM azure.authorization.role_assignments\nWHERE subscription_id = 'd0a7d0c1-76bf-404f-bc48-ce42346fd01b'\n  AND scope = '/subscriptions/d0a7d0c1-76bf-404f-bc48-ce42346fd01b'\n  AND role_assignment_name = 'fdf3b393-76c6-4687-8311-849f5dc27dd8';",
+      "blast_radius": "Removes Owner rights for one user at subscription scope; workloads are not changed, but the user may lose ability to manage all subscription resources."
+    },
+    {
+      "finding_fingerprint": "55f1bc8abb",
+      "material": true,
+      "rationale": "The GCS bucket oape-demo-public-stackql-demo grants roles/storage.objectViewer to allUsers, making objects publicly readable. This is critical because it is an explicit public IAM binding, not merely a missing guardrail.",
+      "correlated_fingerprints": [],
+      "remediation_plan": "1. Confirm whether any objects are intentionally public. 2. Remove allUsers from the roles/storage.objectViewer binding on the bucket IAM policy. 3. If public distribution is required, replace it with a controlled mechanism such as signed URLs or a dedicated public bucket with approved data only. 4. Re-check the bucket IAM policy and object access after the change.",
+      "remediation_sql": "DELETE FROM google.storage.bucket_iam_bindings\nWHERE project = 'stackql-demo'\n  AND bucket = 'oape-demo-public-stackql-demo'\n  AND role = 'roles/storage.objectViewer'\n  AND member = 'allUsers';",
+      "blast_radius": "Public anonymous reads from this bucket are removed; authenticated principals with other bindings remain unaffected."
+    },
+    {
+      "finding_fingerprint": "04dca579c0",
+      "material": true,
+      "rationale": "The IAM user jeffrey.aven has an active access key and administrative privileges, which is a critical long-lived credential risk. It correlates with another active admin key for the same user, so both should be disabled in a coordinated rotation/removal.",
+      "correlated_fingerprints": [
+        "9d95d49b60",
+        "99052e27cb",
+        "6428c7addc",
+        "6f92ea4ce6"
+      ],
+      "remediation_plan": "1. Identify workloads or users currently using access key AKIA376P4FQS47OOUULV. 2. Migrate usage to an IAM role, SSO, or a tightly scoped replacement credential if absolutely required. 3. Deactivate the key first as the smallest reversible change and monitor for failures. 4. Delete the key after the monitoring window and remove direct AdministratorAccess from the IAM user where possible.",
+      "remediation_sql": "UPDATE aws.iam.access_keys\nSET status = 'Inactive'\nWHERE region = 'us-east-1'\n  AND user_name = 'jeffrey.aven'\n  AND access_key_id = 'AKIA376P4FQS47OOUULV';",
+      "blast_radius": "Any process using this specific access key will lose AWS API access; the change is reversible by reactivating the key during the validation window."
+    },
+    {
+      "finding_fingerprint": "9d95d49b60",
+      "material": true,
+      "rationale": "The IAM user jeffrey.aven has a second active administrative access key, compounding the exposure from the same principal. Key age is not a mitigant; active admin keys are high-impact whether old or newly created.",
+      "correlated_fingerprints": [
+        "04dca579c0",
+        "99052e27cb",
+        "6428c7addc",
+        "6f92ea4ce6"
+      ],
+      "remediation_plan": "1. Correlate CloudTrail usage for AKIA376P4FQSRBCBERLL with known workloads. 2. Move any legitimate use to role-based or SSO access. 3. Set the key to Inactive and monitor for breakage. 4. Delete it after confirmation and review/remediate the user\u2019s admin policy attachments.",
+      "remediation_sql": "UPDATE aws.iam.access_keys\nSET status = 'Inactive'\nWHERE region = 'us-east-1'\n  AND user_name = 'jeffrey.aven'\n  AND access_key_id = 'AKIA376P4FQSRBCBERLL';",
+      "blast_radius": "Only callers using access key AKIA376P4FQSRBCBERLL are affected; disabling both jeffrey.aven keys may remove all programmatic access for that user."
+    },
+    {
+      "finding_fingerprint": "99052e27cb",
+      "material": true,
+      "rationale": "The IAM user kieran.rimmer has an active access key with administrative privileges, creating a standing credential that can fully control the AWS account if compromised. This correlates with the other admin-user key findings as an account-wide pattern of long-lived privileged keys.",
+      "correlated_fingerprints": [
+        "04dca579c0",
+        "9d95d49b60",
+        "6428c7addc",
+        "6f92ea4ce6"
+      ],
+      "remediation_plan": "1. Check recent use of AKIA376P4FQSS2ONB2NS and identify any dependency. 2. Replace legitimate automation with an IAM role or a least-privilege key. 3. Deactivate the key and monitor CloudTrail/application errors. 4. Delete it after validation and remove AdministratorAccess from the user unless explicitly required through a controlled path.",
+      "remediation_sql": "UPDATE aws.iam.access_keys\nSET status = 'Inactive'\nWHERE region = 'us-east-1'\n  AND user_name = 'kieran.rimmer'\n  AND access_key_id = 'AKIA376P4FQSS2ONB2NS';",
+      "blast_radius": "Any automation or CLI use of this exact key will fail; no other IAM users or keys are changed."
+    },
+    {
+      "finding_fingerprint": "6428c7addc",
+      "material": true,
+      "rationale": "The oape-demo-admin-user key is active and has administrative privileges; the fact it was created today is not a mitigant. Newly created admin keys can still be leaked immediately and should not remain as standing credentials.",
+      "correlated_fingerprints": [
+        "04dca579c0",
+        "9d95d49b60",
+        "99052e27cb",
+        "6f92ea4ce6"
+      ],
+      "remediation_plan": "1. Confirm whether AKIA376P4FQSWYJ55A7O was created for a current demo or automation task. 2. Move the task to an assumed role with least privilege or time-bound credentials. 3. Deactivate the key as the reversible first step. 4. Delete the key once no legitimate use remains and remove AdministratorAccess from oape-demo-admin-user if not required.",
+      "remediation_sql": "UPDATE aws.iam.access_keys\nSET status = 'Inactive'\nWHERE region = 'us-east-1'\n  AND user_name = 'oape-demo-admin-user'\n  AND access_key_id = 'AKIA376P4FQSWYJ55A7O';",
+      "blast_radius": "Disables only this newly created admin key; any demo process depending on it will need role-based or replacement credentials."
+    },
+    {
+      "finding_fingerprint": "6f92ea4ce6",
+      "material": true,
+      "rationale": "The stackql IAM user has an active administrative access key, creating a high-impact standing credential. It correlates with the broader set of active admin keys and should be addressed as part of privileged credential cleanup in the AWS account.",
+      "correlated_fingerprints": [
+        "04dca579c0",
+        "9d95d49b60",
+        "99052e27cb",
+        "6428c7addc"
+      ],
+      "remediation_plan": "1. Determine whether StackQL automation is using AKIA376P4FQSVCMYBQ7Y. 2. Replace it with an assumable role scoped to the required read or remediation actions. 3. Deactivate the access key and monitor for failed jobs. 4. Delete the key after validation and remove direct administrative privileges from the user where feasible.",
+      "remediation_sql": "UPDATE aws.iam.access_keys\nSET status = 'Inactive'\nWHERE region = 'us-east-1'\n  AND user_name = 'stackql'\n  AND access_key_id = 'AKIA376P4FQSVCMYBQ7Y';",
+      "blast_radius": "StackQL or other automation using this key will lose API access until moved to a role or replacement credential; other users are not affected."
+    }
+  ],
+  "executive_summary": "The escalated set contains multiple material issues across the approved tenancy: five AWS security groups expose SSH to the internet, three public-IP EC2 instances use unencrypted EBS volumes, one RDS instance is unencrypted, Azure has both public blob access and a blanket inbound NSG rule, a GCS bucket is publicly readable, and several AWS IAM users hold active administrative access keys. The highest-priority reversible actions are to deactivate the admin access keys, remove public object/blob access, and revoke broad inbound network rules; data-at-rest findings require planned encrypted replacements rather than in-place toggles. The Azure subscription-scope Owner assignment is a standing-privilege governance issue rather than an incident, but it is still material and should be reduced to least privilege or just-in-time access.",
+  "artifacts": [
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/1",
+      "number": 1,
+      "fingerprint": "73d3e4f457",
+      "title": "Security group allows SSH from the internet"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/2",
+      "number": 2,
+      "fingerprint": "801065a900",
+      "title": "Security group allows SSH from the internet"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/3",
+      "number": 3,
+      "fingerprint": "917649eb31",
+      "title": "Security group allows SSH from the internet"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/4",
+      "number": 4,
+      "fingerprint": "173590bf5a",
+      "title": "Security group allows SSH from the internet"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/5",
+      "number": 5,
+      "fingerprint": "5f059314bc",
+      "title": "Security group allows SSH from the internet"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/6",
+      "number": 6,
+      "fingerprint": "7ce61fd261",
+      "title": "RDS instance storage is not encrypted at rest"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/7",
+      "number": 7,
+      "fingerprint": "6a78ef9df8",
+      "title": "Unencrypted volume is attached to an instance with a public IP"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/8",
+      "number": 8,
+      "fingerprint": "0c4b472d40",
+      "title": "Unencrypted volume is attached to an instance with a public IP"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/9",
+      "number": 9,
+      "fingerprint": "ea0a620cb7",
+      "title": "Unencrypted volume is attached to an instance with a public IP"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/10",
+      "number": 10,
+      "fingerprint": "3b2fe1023c",
+      "title": "Storage account allows anonymous public blob access"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/11",
+      "number": 11,
+      "fingerprint": "1ef76ea300",
+      "title": "NSG allows inbound traffic from the internet"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/12",
+      "number": 12,
+      "fingerprint": "e36569f451",
+      "title": "Owner role is assigned directly at subscription scope"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/13",
+      "number": 13,
+      "fingerprint": "55f1bc8abb",
+      "title": "Bucket grants public IAM access"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/14",
+      "number": 14,
+      "fingerprint": "04dca579c0",
+      "title": "Administrator user has an active access key"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/15",
+      "number": 15,
+      "fingerprint": "9d95d49b60",
+      "title": "Administrator user has an active access key"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/16",
+      "number": 16,
+      "fingerprint": "99052e27cb",
+      "title": "Administrator user has an active access key"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/17",
+      "number": 17,
+      "fingerprint": "6428c7addc",
+      "title": "Administrator user has an active access key"
+    },
+    {
+      "action": "created",
+      "url": "https://github.com/stackql-labs/oape-demo-findings/issues/18",
+      "number": 18,
+      "fingerprint": "6f92ea4ce6",
+      "title": "Administrator user has an active access key"
+    }
+  ],
+  "ledger": {
+    "scenario": "cspm",
+    "trace_id": "trace_2dd4d811e88842a48bfea05eb1c1f93e",
+    "trace_url": "https://platform.openai.com/traces/trace?trace_id=trace_2dd4d811e88842a48bfea05eb1c1f93e",
+    "started_at": "2026-09-22T10:55:48.227160+00:00",
+    "duration_s": 248.934802,
+    "total_cost_usd": 0.364701,
+    "entries": [
+      {
+        "label": "sweep (classify)",
+        "model": "gpt-5.4-mini",
+        "requests": 28,
+        "input_tokens": 466319,
+        "cached_tokens": 436736,
+        "output_tokens": 9982,
+        "reasoning_tokens": 1163,
+        "tool_calls": 27,
+        "select_calls": 19,
+        "mutation_calls": 0,
+        "tool_names": {
+          "run_select_query": 19,
+          "render_query": 8
+        },
+        "cost_usd": 0.09986144999999999
+      },
+      {
+        "label": "reasoning (assess)",
+        "model": "gpt-5.5",
+        "requests": 1,
+        "input_tokens": 10290,
+        "cached_tokens": 0,
+        "output_tokens": 7113,
+        "reasoning_tokens": 1034,
+        "tool_calls": 0,
+        "select_calls": 0,
+        "mutation_calls": 0,
+        "tool_names": {},
+        "cost_usd": 0.26484
+      }
+    ],
+    "notes": []
+  }
+}

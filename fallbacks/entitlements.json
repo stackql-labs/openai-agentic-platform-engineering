@@ -1,0 +1,149 @@
+{
+  "recorded_at": "2026-09-22T10:55:15.081075+00:00",
+  "findings": {
+    "scenario": "entitlements",
+    "findings": [
+      {
+        "provider": "aws",
+        "resource": "arn:aws:iam::824532806693:user/jeffrey.aven",
+        "finding_type": "administrator_access",
+        "severity": "medium",
+        "title": "IAM user jeffrey.aven has AdministratorAccess",
+        "evidence": "cspm/aws_iam_user_attached_policies: user_name=jeffrey.aven, policy_name=AdministratorAccess, policy_arn=arn:aws:iam::aws:policy/AdministratorAccess",
+        "proposed_remediation": "Detach the AdministratorAccess managed policy from the user: aws iam detach-user-policy --user-name jeffrey.aven --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+        "query_id": "cspm/aws_iam_user_attached_policies",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "arn:aws:iam::824532806693:user/kieran.rimmer",
+        "finding_type": "administrator_access",
+        "severity": "medium",
+        "title": "IAM user kieran.rimmer has AdministratorAccess",
+        "evidence": "cspm/aws_iam_user_attached_policies: user_name=kieran.rimmer, policy_name=AdministratorAccess, policy_arn=arn:aws:iam::aws:policy/AdministratorAccess",
+        "proposed_remediation": "Detach the AdministratorAccess managed policy from the user: aws iam detach-user-policy --user-name kieran.rimmer --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+        "query_id": "cspm/aws_iam_user_attached_policies",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "arn:aws:iam::824532806693:user/oape-demo-admin-user",
+        "finding_type": "administrator_access",
+        "severity": "high",
+        "title": "IAM user oape-demo-admin-user has AdministratorAccess",
+        "evidence": "cspm/aws_iam_user_attached_policies: user_name=oape-demo-admin-user, policy_name=AdministratorAccess, policy_arn=arn:aws:iam::aws:policy/AdministratorAccess",
+        "proposed_remediation": "Detach the AdministratorAccess managed policy from the user: aws iam detach-user-policy --user-name oape-demo-admin-user --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+        "query_id": "cspm/aws_iam_user_attached_policies",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "aws",
+        "resource": "arn:aws:iam::824532806693:user/stackql",
+        "finding_type": "administrator_access",
+        "severity": "high",
+        "title": "IAM user stackql has AdministratorAccess",
+        "evidence": "cspm/aws_iam_user_attached_policies: user_name=stackql, policy_name=AdministratorAccess, policy_arn=arn:aws:iam::aws:policy/AdministratorAccess",
+        "proposed_remediation": "Detach the AdministratorAccess managed policy from the user: aws iam detach-user-policy --user-name stackql --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+        "query_id": "cspm/aws_iam_user_attached_policies",
+        "monthly_cost_estimate_usd": null
+      },
+      {
+        "provider": "openai_admin",
+        "resource": "tenant",
+        "finding_type": "idp_access_blocked",
+        "severity": "info",
+        "title": "IdP queries were blocked by 403",
+        "evidence": "entitlements/github_members_vs_idp and entitlements/idp_groups both returned HTTP 403 from Entra ID; IdP data was unreachable for this tenant",
+        "proposed_remediation": "Grant the StackQL app registration Microsoft Graph consent or otherwise restore Entra ID query access, then rerun the entitlements checks",
+        "query_id": "entitlements/github_members_vs_idp",
+        "monthly_cost_estimate_usd": null
+      }
+    ],
+    "summary": "The AWS account has four IAM users with AdministratorAccess. Two appear to be non-human or demo admin principals and two appear to be human users. GitHub outside-collaborator admin checks returned no findings, and Entra ID queries were blocked with HTTP 403, so IdP-based orphan/leaver checks could not be completed."
+  },
+  "assessments": [
+    {
+      "finding_fingerprint": "772144d0f0",
+      "material": true,
+      "rationale": "The IAM user `oape-demo-admin-user` has direct attachment of AWS managed `AdministratorAccess`, which is account-wide privilege in AWS account 824532806693. The `oape-demo` prefix suggests a demo principal, but demo status does not justify unrestricted administrative access; correlation with three other AdministratorAccess users indicates broader entitlement sprawl. IdP access was blocked, so human ownership confirmation is required before recertification can be considered complete.",
+      "correlated_fingerprints": [
+        "4965b85e38",
+        "005bbe70a9",
+        "ef12e9e2eb",
+        "21e3a26d77"
+      ],
+      "remediation_plan": "1. Have the AWS account owner and the oape-demo demo owner confirm whether `oape-demo-admin-user` is still required. 2. Replace `AdministratorAccess` with least privilege: a customer-managed policy limited to required demo actions and, where supported, resources tagged `purpose=oape-demo` or named with prefix `oape-demo`; prefer short-lived role assumption over a standing IAM user. 3. Validate no critical demo workflow depends on account-wide admin. 4. Detach `AdministratorAccess` from the user using the StackQL DELETE below. 5. Rerun the entitlement check and restore Entra ID/IdP query access so ownership can be independently reconciled.",
+      "remediation_sql": "DELETE FROM aws.iam.attached_user_policies\nWHERE user_name = 'oape-demo-admin-user'\n  AND policy_arn = 'arn:aws:iam::aws:policy/AdministratorAccess'\n  AND region = 'us-east-1';",
+      "blast_radius": "Removes only the direct `AdministratorAccess` managed-policy attachment from IAM user `oape-demo-admin-user`; it does not delete the user, access keys, inline policies, group-derived permissions, or other users. Demo automation using this user may fail if it relies on unrestricted AWS administration."
+    },
+    {
+      "finding_fingerprint": "ef12e9e2eb",
+      "material": true,
+      "rationale": "The IAM user `stackql` has direct `AdministratorAccess`, giving any holder of its credentials full control of AWS account 824532806693. Because this appears to be an automation/tooling principal, standing account-admin privilege is especially risky and should be replaced with narrowly scoped audit/remediation permissions. The other AdministratorAccess findings and blocked IdP data increase concern that ownership and necessity have not been recently recertified.",
+      "correlated_fingerprints": [
+        "4965b85e38",
+        "005bbe70a9",
+        "772144d0f0",
+        "21e3a26d77"
+      ],
+      "remediation_plan": "1. Have the platform engineering owner for StackQL automation and the AWS account owner confirm whether the `stackql` IAM user is still required. 2. Replace `AdministratorAccess` with least privilege: preferably an assumable role with short-lived credentials and only the read-only inventory permissions plus specific remediation actions StackQL actually performs in this tenancy. 3. Confirm StackQL workflows still run under the reduced policy in AWS account 824532806693. 4. Detach `AdministratorAccess` from the user using the StackQL DELETE below. 5. Rerun the entitlement sweep and resolve the Entra ID 403 so the principal can be reconciled against authoritative ownership records.",
+      "remediation_sql": "DELETE FROM aws.iam.attached_user_policies\nWHERE user_name = 'stackql'\n  AND policy_arn = 'arn:aws:iam::aws:policy/AdministratorAccess'\n  AND region = 'us-east-1';",
+      "blast_radius": "Removes only the direct `AdministratorAccess` managed-policy attachment from IAM user `stackql`; it does not delete the user, keys, inline policies, group-derived permissions, or other principals. StackQL automation may lose the ability to perform unrestricted mutations and should be tested against the intended least-privilege policy."
+    }
+  ],
+  "executive_summary": "Both escalated findings are material: two AWS IAM users in account 824532806693 have direct `AdministratorAccess`, and the broader sweep shows two additional admin users plus blocked IdP access, indicating entitlement sprawl and incomplete ownership verification. Recertify each principal with the named service/demo or platform owner, replace standing admin with narrowly scoped policies or short-lived roles, detach the AWS managed admin policy, then rerun the entitlement checks after restoring IdP query access.",
+  "artifacts": [
+    {
+      "action": "report",
+      "path": "C:\\LocalGitRepos\\stackql\\demo-repos\\openai-agentic-platform-engineering\\runs\\entitlements-recertification-20260922T105515Z.md"
+    }
+  ],
+  "ledger": {
+    "scenario": "entitlements",
+    "trace_id": "trace_f1b9faf6be824d679ded99a58a72428a",
+    "trace_url": "https://platform.openai.com/traces/trace?trace_id=trace_f1b9faf6be824d679ded99a58a72428a",
+    "started_at": "2026-09-22T10:53:22.635267+00:00",
+    "duration_s": 112.417503,
+    "total_cost_usd": 0.171852,
+    "entries": [
+      {
+        "label": "sweep (classify)",
+        "model": "gpt-5.4-mini",
+        "requests": 11,
+        "input_tokens": 89966,
+        "cached_tokens": 76800,
+        "output_tokens": 3968,
+        "reasoning_tokens": 1243,
+        "tool_calls": 10,
+        "select_calls": 7,
+        "mutation_calls": 0,
+        "tool_names": {
+          "run_select_query": 7,
+          "render_query": 3
+        },
+        "cost_usd": 0.0334905
+      },
+      {
+        "label": "reasoning (assess)",
+        "model": "gpt-5.5",
+        "requests": 9,
+        "input_tokens": 43727,
+        "cached_tokens": 33792,
+        "output_tokens": 2393,
+        "reasoning_tokens": 1132,
+        "tool_calls": 8,
+        "select_calls": 0,
+        "mutation_calls": 0,
+        "tool_names": {
+          "list_resources": 1,
+          "list_methods": 3,
+          "query_library_search": 1,
+          "describe_resource": 1,
+          "describe_method": 2
+        },
+        "cost_usd": 0.138361
+      }
+    ],
+    "notes": []
+  }
+}

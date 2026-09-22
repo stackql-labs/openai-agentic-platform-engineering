@@ -1,0 +1,27 @@
+# secrets and local state
+.env
+.env.*
+!.env.example
+.stackql/
+snapshots/
+*.db
+*.sqlite
+*.log
+.stackql-mcp-audit.log
+seed/**/.terraform/
+seed/**/terraform.tfstate.backup
+seed/**/.terraform.lock.hcl
+seed/state/
+# python
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+# runs
+runs/
+seed/terraform/*.tfstate*
+seed/terraform/.terraform/

@@ -1,0 +1,110 @@
+{
+  "recorded_at": "2026-09-22T11:01:32.952318+00:00",
+  "prev": {
+    "ts": "20260922T105955Z",
+    "table": "snapshot_20260922T105955Z",
+    "views": [
+      "snap_20260922T105955Z_aws_buckets",
+      "snap_20260922T105955Z_aws_instances",
+      "snap_20260922T105955Z_aws_security_groups",
+      "snap_20260922T105955Z_azure_nsgs",
+      "snap_20260922T105955Z_google_firewalls"
+    ],
+    "counts": {
+      "s3_bucket": 4,
+      "ec2_instance": 4,
+      "security_group": 29,
+      "network_security_group": 2,
+      "firewall": 11
+    },
+    "taken_at": "2026-09-22T11:00:03.522107+00:00",
+    "label": "drift-brief",
+    "seconds": 7.8
+  },
+  "curr": {
+    "ts": "20260922T110121Z",
+    "table": "snapshot_20260922T110121Z",
+    "views": [
+      "snap_20260922T110121Z_aws_buckets",
+      "snap_20260922T110121Z_aws_instances",
+      "snap_20260922T110121Z_aws_security_groups",
+      "snap_20260922T110121Z_azure_nsgs",
+      "snap_20260922T110121Z_google_firewalls"
+    ],
+    "counts": {
+      "s3_bucket": 4,
+      "ec2_instance": 4,
+      "security_group": 29,
+      "network_security_group": 2,
+      "firewall": 11
+    },
+    "taken_at": "2026-09-22T11:01:28.875960+00:00",
+    "label": "drift-brief",
+    "seconds": 7.6
+  },
+  "delta": [],
+  "tfstate_drift": [
+    {
+      "resource_type": "ec2_instance",
+      "resource_key": "i-0517d8a0a4e51df18",
+      "tf_address": "aws_instance.tf_app",
+      "intended_attrs": "{\"instance_type\":\"t3.nano\",\"state\":\"running\",\"tags\":{\"Name\":\"oape-demo-tf-app\",\"env\":\"prod\",\"managed-by\":\"terraform\",\"owner\":\"platform-team\",\"purpose\":\"oape-demo\"}}",
+      "live_attrs": "{\"instance_type\":\"t3.nano\",\"state\":\"running\",\"tags\":{\"Name\":\"oape-demo-tf-app\",\"env\":\"staging\",\"managed-by\":\"terraform\",\"owner\":\"platform-team\",\"purpose\":\"oape-demo\"}}",
+      "what_changed": "tags: {\"Name\": \"oape-demo-tf-app\", \"env\": \"prod\", \"managed-by\": \"terraform\", \"owner\": \"platform-team\", \"purpose\": \"oape-demo\"} -> {\"Name\": \"oape-demo-tf-app\", \"env\": \"staging\", \"managed-by\": \"terraform\", \"owner\": \"platform-team\", \"purpose\": \"oape-demo\"}"
+    },
+    {
+      "resource_type": "security_group",
+      "resource_key": "sg-059262f8292efd462",
+      "tf_address": "aws_security_group.tf_app",
+      "intended_attrs": "{\"ingress\":[\"tcp:443-443:10.0.0.0/8\"],\"name\":\"oape-demo-tf-app-sg\",\"tags\":{\"Name\":\"oape-demo-tf-app-sg\",\"env\":\"prod\",\"managed-by\":\"terraform\",\"purpose\":\"oape-demo\"}}",
+      "live_attrs": "{\"ingress\":[\"tcp:443-443:10.0.0.0/8\",\"tcp:8080-8080:0.0.0.0/0\"],\"name\":\"oape-demo-tf-app-sg\",\"tags\":{\"Name\":\"oape-demo-tf-app-sg\",\"env\":\"prod\",\"managed-by\":\"terraform\",\"purpose\":\"oape-demo\"}}",
+      "what_changed": "ingress: [\"tcp:443-443:10.0.0.0/8\"] -> [\"tcp:443-443:10.0.0.0/8\", \"tcp:8080-8080:0.0.0.0/0\"]"
+    }
+  ],
+  "brief": {
+    "changes": [
+      {
+        "resource_type": "ec2_instance",
+        "resource_key": "i-0517d8a0a4e51df18",
+        "change": "drift-from-terraform",
+        "what_changed": "tags.env: \"prod\" -> \"staging\"",
+        "classification": "benign",
+        "reason": "This is a tag change only and does not alter access, exposure, or encryption."
+      },
+      {
+        "resource_type": "security_group",
+        "resource_key": "sg-059262f8292efd462",
+        "change": "drift-from-terraform",
+        "what_changed": "ingress: [\"tcp:443-443:10.0.0.0/8\"] -> [\"tcp:443-443:10.0.0.0/8\", \"tcp:8080-8080:0.0.0.0/0\"]",
+        "classification": "material",
+        "reason": "This adds a new public ingress rule on port 8080 from 0.0.0.0/0, widening network exposure."
+      }
+    ],
+    "brief": "I found two Terraform drifts: EC2 instance i-0517d8a0a4e51df18 only has a tag update from env=prod to env=staging, which is benign, while security group sg-059262f8292efd462 now allows public inbound TCP/8080 from 0.0.0.0/0 in addition to the existing 443 rule, which is material because it widens external access."
+  },
+  "ledger": {
+    "scenario": "drift",
+    "trace_id": "trace_dc61853dbd1a486d9f7446b4acc27fb4",
+    "trace_url": "https://platform.openai.com/traces/trace?trace_id=trace_dc61853dbd1a486d9f7446b4acc27fb4",
+    "started_at": "2026-09-22T11:01:28.923904+00:00",
+    "duration_s": 4.010813,
+    "total_cost_usd": 0.001916,
+    "entries": [
+      {
+        "label": "brief (deltas only)",
+        "model": "gpt-5.4-mini",
+        "requests": 1,
+        "input_tokens": 587,
+        "cached_tokens": 0,
+        "output_tokens": 328,
+        "reasoning_tokens": 19,
+        "tool_calls": 0,
+        "select_calls": 0,
+        "mutation_calls": 0,
+        "tool_names": {},
+        "cost_usd": 0.00191625
+      }
+    ],
+    "notes": []
+  }
+}
