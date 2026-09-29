@@ -35,10 +35,30 @@ edge/                Python + OpenAI Agents SDK  - edge autopilot, the edgepilot
 ```
 
 Each use case directory holds its own manifest (pyproject / package.json / Cargo.toml), the agent
-code with `setup` and `run` subcommands, `queries/` (one .sql file per query with a header comment:
-id, providers, params, expected_columns, description) and `stack/` (a stackql-deploy stack that
-provisions the small demo estate the use case needs, per provider where the use case is
-multi-cloud).
+code with `setup` and `run` subcommands, `prompts/` (one markdown file per agent role, plus
+`discovery.md`, the shared briefing on how to discover resources through StackQL), `queries/`
+(a few example SELECTs under `examples/` and the code-owned statements the model never sees:
+gate target assertions, drift snapshot sources, perturb and restore statements) and `stack/`
+(a stackql-deploy stack that provisions the small demo estate the use case needs, per provider
+where the use case is multi-cloud).
+
+## Intent-driven, self-discovering agents
+
+The point of every demo is StackQL's self-discovery surface. Agents are given an intent in prose,
+not a query pack:
+
+- Prompts live in `<use case>/prompts/*.md`, are loaded at run time, and have `{{ placeholders }}`
+  for tenancy and policy values from `.env`. They state the intent, the scope, the output contract
+  and the guardrails. They do not enumerate resource names, columns or SQL
+- The agent discovers the API surface itself: `query_library_search` with its intent first, then
+  `list_services` -> `list_resources` -> `describe_resource` / `list_methods` / `describe_method`,
+  then `validate_select_query`, then `run_select_query`. The server's own guidance, the MCP
+  resource `stackql://docs/instructions`, is read at startup and appended to the discovery briefing
+- A mutation's IO contract is discovered the same way (`describe_method` on the write method);
+  the model puts the exact single statement in its structured output and code decides whether to
+  run it: allowlist of verb and resource, target assertion, approval phrase, one execution
+- A handful of example queries may be cited from `queries/examples/` as the shape of a query, never
+  as a pack to run
 
 ## StackQL MCP tool surface (v0.12.718, verify with `server_info`)
 
@@ -78,8 +98,8 @@ Rules for agent code:
 ## Conventions
 
 - Python 3.12+ with uv and ruff; Node 22 with TypeScript strict; Rust 2021 edition with clippy
-- All SQL lives in `<use case>/queries/` - agents load queries from files, no inline SQL in agent
-  code; a mutation template is loaded from a file and rendered by the gate
+- No SQL string literals in agent code and no SQL in prompts beyond a cited example; the only SQL
+  files are `<use case>/queries/examples/` and the code-owned statements listed above
 - Findings shape is the same across runtimes: provider, resource, finding_type, severity, title,
   evidence, proposed_remediation, query_id, optional monthly_cost_estimate_usd
 - Every run ends with the cost/trace block: tokens per step, USD estimate from `pricing.json`,
@@ -91,12 +111,14 @@ Rules for agent code:
 ## Definition of done for a use case
 
 1. The stack builds and tears down cleanly and produces the use case's findings deterministically
-2. Queries validated (`validate_select_query`) and committed with header comments
+2. Prompts in `prompts/` state intent, scope and guardrails; example and code-owned queries pass
+   `validate_select_query` and carry header comments
 3. The program produces structured findings and the downstream artifact (report, decision record,
    close-out note) and prints the cost/trace block
 4. README section in the shared template (description, intent, implementation, usage)
-5. Offline tests cover the query loader, the findings schema and, where there is a gate, that the
-   mutation path is unreachable without a matching approval
+5. Offline tests cover the prompt loader, the findings schema and, where there is a gate, that the
+   mutation path is unreachable without a matching approval and that the statement allowlist
+   rejects anything but the one permitted verb and resource
 
 ## What not to build
 
