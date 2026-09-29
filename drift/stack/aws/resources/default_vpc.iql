@@ -1,0 +1,5 @@
+/*+ exports */
+SELECT vpc_id
+FROM aws.ec2.vpcs
+WHERE region = '{{ region }}'
+AND is_default = true

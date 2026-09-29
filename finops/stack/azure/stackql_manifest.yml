@@ -1,0 +1,54 @@
+# FinOps demo estate, Azure part - a stackql-deploy stack (the findings are planted with the same
+# SQL interface the sweep uses to find them). One stack per provider so an operator with one
+# cloud can still run the use case. Style follows the verified Azure reference stack.
+#
+# Plants, tagged {{ DEMO_TAG_KEY }}={{ DEMO_TAG_VALUE }} in one resource group named with DEMO_PREFIX:
+#   resource_group   - holds everything; teardown deletes it last
+#   orphan_disk      - a 4 GB Standard_LRS managed disk attached to nothing (about 0.20 USD/month)
+#   orphan_public_ip - a Standard static public IP associated with nothing (about 3.65 USD/month)
+#
+# The service principal needs Contributor on the demo subscription.
+#
+# Build:    stackql-deploy build    finops/stack/azure dev --env-file .env
+# Test:     stackql-deploy test     finops/stack/azure dev --env-file .env
+# Teardown: stackql-deploy teardown finops/stack/azure dev --env-file .env
+version: 1
+name: finops-azure
+description: FinOps demo estate (Azure) - deliberately idle resources for openai-agentic-platform-engineering
+providers:
+  - azure::v26.07.00420
+globals:
+  - name: subscription_id
+    value: "{{ AZURE_SUBSCRIPTION_ID }}"
+  - name: location
+    value: "{{ AZURE_LOCATION }}"
+  - name: prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: global_tags
+    description: a JSON string so the tag key can come from DEMO_TAG_KEY (dict keys are not templated)
+    value: '{"{{ DEMO_TAG_KEY }}": "{{ DEMO_TAG_VALUE }}", "managed-by": "stackql-deploy", "stackName": "{{ stack_name }}", "stackEnv": "{{ stack_env }}"}'
+resources:
+  - name: resource_group
+    props:
+      - name: resource_group_name
+        value: "{{ prefix }}-finops-rg"
+    exports:
+      - resource_group_name
+
+  - name: orphan_disk
+    description: planted finops finding - managed disk attached to nothing (finops/azure_unattached_disks)
+    props:
+      - name: disk_name
+        value: "{{ prefix }}-finops-orphan-disk"
+      - name: disk_size_gb
+        value: 4
+    exports:
+      - orphan_disk_id
+
+  - name: orphan_public_ip
+    description: planted finops finding - public IP associated with nothing (finops/azure_unassociated_public_ips)
+    props:
+      - name: orphan_pip_name
+        value: "{{ prefix }}-finops-orphan-pip"
+    exports:
+      - orphan_public_ip_id

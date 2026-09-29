@@ -1,0 +1,26 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM aws.ec2.addresses
+WHERE region = '{{ region }}'
+AND tags LIKE '%{{ eip_name }}%'
+
+/*+ create */
+UPDATE aws.ec2.address
+SET Domain = 'vpc',
+    TagSpecification = '[{"ResourceType": "elastic-ip", "Tags": {{ eip_tags }}}]'
+WHERE region = '{{ region }}'
+
+/*+ statecheck, retries=3, retry_delay=5 */
+SELECT COUNT(*) AS count FROM aws.ec2.addresses
+WHERE region = '{{ region }}'
+AND tags LIKE '%{{ eip_name }}%'
+AND COALESCE(association_id, 'null') = 'null'
+
+/*+ exports */
+SELECT allocation_id FROM aws.ec2.addresses
+WHERE region = '{{ region }}'
+AND tags LIKE '%{{ eip_name }}%'
+
+/*+ delete */
+EXEC aws.ec2.address.release_address
+  @region = '{{ region }}',
+  @AllocationId = '{{ allocation_id }}'

@@ -1,0 +1,66 @@
+# Entitlements demo estate - Microsoft Entra ID (stackql-deploy stack)
+#
+# Plants the "leaver still privileged" finding: a security group <DEMO_PREFIX>-cloud-admins and
+# one user <DEMO_PREFIX>-leaver with accountEnabled=false that is a member of the group. The user's
+# department carries DEMO_TAG_VALUE so it can be found and removed by tag.
+#
+# The entra_id provider reuses AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET. The app
+# registration needs Microsoft Graph APPLICATION permissions with admin consent:
+#   User.ReadWrite.All, Group.ReadWrite.All, GroupMember.ReadWrite.All   (build and teardown)
+#   User.Read.All, Group.Read.All, GroupMember.Read.All                  (the sweep; implied by the above)
+# Without consent every Graph call returns 403 and the sweep records one idp_access_blocked finding.
+#
+# Extra environment for this stack (not used by the sweep):
+#   ENTRA_TENANT_DOMAIN           a verified domain of the tenant for the UPN, e.g. contoso.onmicrosoft.com
+#   ENTRA_LEAVER_INITIAL_PASSWORD initial password Graph requires on create; the account is disabled
+#                                 (accountEnabled=false) so it can never sign in; not stored anywhere
+#
+# Column names verified with `SHOW INSERT INTO entra_id.users.users`, `... entra_id.groups.groups`
+# and `... entra_id.groups.members` on the pulled provider (members add_ref takes group_id and
+# @odata.id); the stack has not been executed live in this build (no tenant credentials).
+#
+# Build:    stackql-deploy build entitlements/stack/entra_id dev --env-file .env
+# Test:     stackql-deploy test  entitlements/stack/entra_id dev --env-file .env
+# Teardown: stackql-deploy teardown entitlements/stack/entra_id dev --env-file .env
+version: 1
+name: entitlements-entra-id
+description: entitlements demo estate in Entra ID - a privileged group with one disabled member
+providers:
+  - entra_id
+globals:
+  - name: demo_prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: demo_tag
+    value: "{{ DEMO_TAG_VALUE }}"
+  - name: tenant_domain
+    value: "{{ ENTRA_TENANT_DOMAIN }}"
+  - name: leaver_initial_password
+    value: "{{ ENTRA_LEAVER_INITIAL_PASSWORD }}"
+resources:
+  - name: cloud_admins_group
+    description: planted - the privileged IdP group (IDP_PRIVILEGED_GROUP defaults to this name in the sweep)
+    props:
+      - name: group_name
+        value: "{{ demo_prefix }}-cloud-admins"
+    exports:
+      - group_id
+
+  - name: leaver_user
+    description: planted - a disabled account (the leaver) tagged by department
+    props:
+      - name: leaver_nick
+        value: "{{ demo_prefix }}-leaver"
+      - name: leaver_upn
+        value: "{{ demo_prefix }}-leaver@{{ tenant_domain }}"
+      - name: leaver_display_name
+        value: "Former Engineer ({{ demo_tag }} leaver)"
+    exports:
+      - leaver_object_id
+
+  - name: leaver_membership
+    description: planted - the disabled account is still a member of the privileged group (the critical finding)
+    props:
+      - name: group_id
+        value: "{{ group_id }}"
+      - name: leaver_object_id
+        value: "{{ leaver_object_id }}"

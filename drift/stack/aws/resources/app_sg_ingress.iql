@@ -1,0 +1,31 @@
+/*+ exists */
+SELECT COUNT(*) AS count
+FROM aws.ec2.security_group_rules
+WHERE region = '{{ region }}'
+AND group_id = '{{ sg_id }}'
+AND ip_protocol = 'tcp'
+AND from_port = 443
+AND to_port = 443
+AND cidr_ipv_4 = '10.0.0.0/8'
+
+/*+ create */
+UPDATE aws.ec2.security_groups
+SET IpPermissions = '{{ ingress_permissions }}'
+WHERE GroupId = '{{ sg_id }}'
+AND region = '{{ region }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) AS count
+FROM aws.ec2.security_group_rules
+WHERE region = '{{ region }}'
+AND group_id = '{{ sg_id }}'
+AND ip_protocol = 'tcp'
+AND from_port = 443
+AND to_port = 443
+AND cidr_ipv_4 = '10.0.0.0/8'
+
+/*+ delete */
+EXEC aws.ec2.security_groups.revoke_security_group_ingress
+@region = '{{ region }}',
+@GroupId = '{{ sg_id }}',
+@IpPermissions = '{{ ingress_permissions }}'

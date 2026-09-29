@@ -1,0 +1,40 @@
+/*+ exists */
+SELECT COUNT(*) AS count
+FROM aws.ec2.security_groups
+WHERE region = '{{ region }}'
+AND group_name = '{{ sg_name }}'
+AND vpc_id = '{{ vpc_id }}'
+
+/*+ create */
+INSERT INTO aws.ec2.security_groups (
+   GroupName,
+   GroupDescription,
+   VpcId,
+   TagSpecification,
+   region
+)
+SELECT
+   '{{ sg_name }}',
+   '{{ sg_description }}',
+   '{{ vpc_id }}',
+   '[{"ResourceType": "security-group", "Tags": {{ global_tags }}}]',
+   '{{ region }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) AS count
+FROM aws.ec2.security_groups
+WHERE region = '{{ region }}'
+AND group_name = '{{ sg_name }}'
+AND vpc_id = '{{ vpc_id }}'
+
+/*+ exports */
+SELECT group_id AS sg_id
+FROM aws.ec2.security_groups
+WHERE region = '{{ region }}'
+AND group_name = '{{ sg_name }}'
+AND vpc_id = '{{ vpc_id }}'
+
+/*+ delete */
+DELETE FROM aws.ec2.security_groups
+WHERE GroupId = '{{ sg_id }}'
+AND region = '{{ region }}'

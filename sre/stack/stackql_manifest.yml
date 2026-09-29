@@ -1,0 +1,72 @@
+# sre demo estate - a stackql-deploy stack against a local kind cluster reached through
+# `kubectl proxy` (no credentials: the proxy authenticates with the operator's kubeconfig).
+#
+# Creates, all labelled purpose=agentic-demo:
+#   namespace           K8S_NAMESPACE (default agentic-demo)
+#   checkout_deployment <DEMO_PREFIX>-checkout, replicas 1, hashicorp/http-echo, small requests/limits
+#   checkout_service    ClusterIP service in front of it
+#
+# The single ready replica is the planted condition: the synthetic alert says the request queue is
+# growing on the only ready replica, and the approved remediation scales the deployment to 2.
+#
+# Build:    stackql-deploy build sre/stack dev --env-file .env
+# Test:     stackql-deploy test  sre/stack dev --env-file .env
+# Teardown: stackql-deploy teardown sre/stack dev --env-file .env   (deletes the namespace last)
+#
+# Operator identity: whatever kubeconfig `kubectl proxy` runs with needs create/delete on
+# namespaces, deployments and services (kind's default admin context has it).
+version: 1
+name: agentic-demo-sre
+description: single-replica checkout deployment in a kind cluster for the agentic SRE use case
+providers:
+  - k8s::v26.08.00453
+globals:
+  - name: cluster_addr
+    description: host:port of kubectl proxy
+    value: "{{ KUBE_CLUSTER_ADDR }}"
+  - name: protocol
+    value: "{{ KUBE_PROTOCOL }}"
+  - name: namespace
+    value: "{{ K8S_NAMESPACE }}"
+  - name: demo_prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: demo_tag_key
+    value: "{{ DEMO_TAG_KEY }}"
+  - name: demo_tag_value
+    value: "{{ DEMO_TAG_VALUE }}"
+resources:
+  - name: namespace
+    description: the demo namespace, labelled with the demo tag
+    props:
+      - name: namespace_metadata
+        value:
+          name: "{{ namespace }}"
+          labels:
+            "{{ demo_tag_key }}": "{{ demo_tag_value }}"
+            managed-by: stackql-deploy
+    exports:
+      - namespace
+
+  - name: checkout_deployment
+    description: planted - one replica of the checkout service; the alert fires against it
+    props:
+      - name: deployment_name
+        value: "{{ demo_prefix }}-checkout"
+      - name: app_label
+        value: checkout
+      - name: initial_replicas
+        value: 1
+      - name: image
+        value: hashicorp/http-echo:1.0
+    exports:
+      - deployment_name
+
+  - name: checkout_service
+    description: ClusterIP service in front of the checkout pods
+    props:
+      - name: service_name
+        value: "{{ demo_prefix }}-checkout"
+      - name: app_label
+        value: checkout
+    exports:
+      - service_name

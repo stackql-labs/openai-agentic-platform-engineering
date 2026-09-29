@@ -1,0 +1,38 @@
+# FinOps demo estate, Google Cloud part - a stackql-deploy stack (the findings are planted with
+# the same SQL interface the sweep uses to find them). One stack per provider so an operator with
+# one cloud can still run the use case.
+#
+# Plants, labelled {{ DEMO_TAG_KEY }}={{ DEMO_TAG_VALUE }} and named with DEMO_PREFIX:
+#   orphan_disk - a 10 GB pd-standard persistent disk attached to nothing (about 0.40 USD/month)
+#
+# The service account needs roles/compute.storageAdmin (or compute.disks.create/delete/get/list)
+# on the demo project. Label keys and values must be lowercase.
+#
+# Build:    stackql-deploy build    finops/stack/google dev --env-file .env
+# Test:     stackql-deploy test     finops/stack/google dev --env-file .env
+# Teardown: stackql-deploy teardown finops/stack/google dev --env-file .env
+version: 1
+name: finops-google
+description: FinOps demo estate (Google Cloud) - a deliberately idle disk for openai-agentic-platform-engineering
+providers:
+  - google::v26.08.00446
+globals:
+  - name: project
+    value: "{{ GOOGLE_PROJECT }}"
+  - name: zone
+    value: "{{ GOOGLE_ZONE }}"
+  - name: prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: global_labels
+    description: a JSON string so the label key can come from DEMO_TAG_KEY (dict keys are not templated)
+    value: '{"{{ DEMO_TAG_KEY }}": "{{ DEMO_TAG_VALUE }}", "managed-by": "stackql-deploy", "stack-name": "{{ stack_name }}", "stack-env": "{{ stack_env }}"}'
+resources:
+  - name: orphan_disk
+    description: planted finops finding - persistent disk attached to nothing (finops/google_unattached_disks)
+    props:
+      - name: disk_name
+        value: "{{ prefix }}-finops-orphan-disk"
+      - name: disk_size_gb
+        value: 10
+    exports:
+      - orphan_disk_name

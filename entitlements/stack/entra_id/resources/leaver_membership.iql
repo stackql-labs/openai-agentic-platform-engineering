@@ -1,0 +1,23 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM entra_id.groups.members
+WHERE group_id = '{{ group_id }}'
+  AND id = '{{ leaver_object_id }}'
+
+/*+ create */
+INSERT INTO entra_id.groups.members (
+  group_id,
+  @odata.id
+)
+SELECT
+  '{{ group_id }}',
+  'https://graph.microsoft.com/v1.0/directoryObjects/{{ leaver_object_id }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) AS count FROM entra_id.groups.members
+WHERE group_id = '{{ group_id }}'
+  AND id = '{{ leaver_object_id }}'
+
+/*+ delete */
+DELETE FROM entra_id.groups.members
+WHERE group_id = '{{ group_id }}'
+  AND directory_object_id = '{{ leaver_object_id }}'

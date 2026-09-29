@@ -1,0 +1,33 @@
+/*+ exists */
+WITH u AS (
+  SELECT user_name FROM aws.iam.users WHERE region = '{{ region }}'
+)
+SELECT COUNT(*) AS count FROM u WHERE user_name = '{{ user_name }}'
+
+/*+ create */
+INSERT INTO aws.iam.users (
+  UserName,
+  Tags,
+  region
+)
+SELECT
+  '{{ user_name }}',
+  '{{ user_tags }}',
+  '{{ region }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+WITH u AS (
+  SELECT user_name FROM aws.iam.users WHERE region = '{{ region }}'
+)
+SELECT COUNT(*) AS count FROM u WHERE user_name = '{{ user_name }}'
+
+/*+ exports */
+WITH u AS (
+  SELECT user_name, arn FROM aws.iam.users WHERE region = '{{ region }}'
+)
+SELECT user_name AS admin_user_name, arn AS admin_user_arn FROM u WHERE user_name = '{{ user_name }}'
+
+/*+ delete */
+DELETE FROM aws.iam.users
+WHERE user_name = '{{ user_name }}'
+  AND region = '{{ region }}'

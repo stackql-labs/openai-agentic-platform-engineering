@@ -1,0 +1,24 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM cloudflare.rulesets.phases
+WHERE zone_id = '{{ zone_id }}' AND ruleset_phase = 'http_ratelimit'
+AND JSON_EXTRACT(rules, '$[0].description') = '{{ rule_description }}'
+
+/*+ createorupdate */
+REPLACE cloudflare.rulesets.phases
+SET rules = '[{"action":"block","ratelimit":{"characteristics":["ip.src","cf.colo.id"],"period":{{ period }},"requests_per_period":{{ baseline_threshold }},"mitigation_timeout":{{ mitigation_timeout }}},"expression":"(starts_with(http.request.uri.path, \"/\"))","description":"{{ rule_description }}","enabled":true}]'
+WHERE zone_id = '{{ zone_id }}' AND ruleset_phase = 'http_ratelimit'
+
+/*+ statecheck, retries=3, retry_delay=5 */
+SELECT COUNT(*) AS count FROM cloudflare.rulesets.phases
+WHERE zone_id = '{{ zone_id }}' AND ruleset_phase = 'http_ratelimit'
+AND JSON_EXTRACT(rules, '$[0].description') = '{{ rule_description }}'
+AND JSON_EXTRACT(rules, '$[0].ratelimit.requests_per_period') = {{ baseline_threshold }}
+
+/*+ exports */
+SELECT id AS ruleset_id, JSON_EXTRACT(rules, '$[0].id') AS rule_id
+FROM cloudflare.rulesets.phases
+WHERE zone_id = '{{ zone_id }}' AND ruleset_phase = 'http_ratelimit'
+
+/*+ delete */
+REPLACE cloudflare.rulesets.phases SET rules = '[]'
+WHERE zone_id = '{{ zone_id }}' AND ruleset_phase = 'http_ratelimit'

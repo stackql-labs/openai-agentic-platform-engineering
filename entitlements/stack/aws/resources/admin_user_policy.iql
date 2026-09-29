@@ -1,0 +1,25 @@
+/*+ exists */
+WITH p AS (
+  SELECT policy_arn FROM aws.iam.attached_user_policies
+  WHERE user_name = '{{ user_name }}' AND region = '{{ region }}'
+)
+SELECT COUNT(*) AS count FROM p WHERE policy_arn = '{{ policy_arn }}'
+
+/*+ create */
+UPDATE aws.iam.user_policies
+SET policy_arn = '{{ policy_arn }}'
+WHERE user_name = '{{ user_name }}'
+  AND region = '{{ region }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+WITH p AS (
+  SELECT policy_arn FROM aws.iam.attached_user_policies
+  WHERE user_name = '{{ user_name }}' AND region = '{{ region }}'
+)
+SELECT COUNT(*) AS count FROM p WHERE policy_arn = '{{ policy_arn }}'
+
+/*+ delete */
+EXEC aws.iam.user_policies.detach_user_policy
+  @UserName = '{{ user_name }}',
+  @PolicyArn = '{{ policy_arn }}',
+  @region = '{{ region }}'
