@@ -1,0 +1,37 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM aws.ec2.volumes
+WHERE region = '{{ region }}'
+AND tags LIKE '%{{ volume_name }}%'
+AND state IN ('creating', 'available', 'in-use')
+
+/*+ create */
+INSERT INTO aws.ec2.volumes (
+  AvailabilityZone,
+  Size,
+  VolumeType,
+  TagSpecification,
+  region
+)
+SELECT
+  '{{ availability_zone }}',
+  {{ volume_size_gb }},
+  'gp3',
+  '[{"ResourceType": "volume", "Tags": {{ volume_tags }}}]',
+  '{{ region }}'
+
+/*+ statecheck, retries=6, retry_delay=5 */
+SELECT COUNT(*) AS count FROM aws.ec2.volumes
+WHERE region = '{{ region }}'
+AND tags LIKE '%{{ volume_name }}%'
+AND state = 'available'
+
+/*+ exports */
+SELECT volume_id FROM aws.ec2.volumes
+WHERE region = '{{ region }}'
+AND tags LIKE '%{{ volume_name }}%'
+AND state IN ('creating', 'available', 'in-use')
+
+/*+ delete */
+DELETE FROM aws.ec2.volumes
+WHERE volume_id = '{{ volume_id }}'
+AND region = '{{ region }}'

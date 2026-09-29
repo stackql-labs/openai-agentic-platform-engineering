@@ -1,0 +1,66 @@
+# FinOps demo estate, AWS part - a stackql-deploy stack (the findings are planted with the same
+# SQL interface the sweep uses to find them). One stack per provider so an operator with one
+# cloud can still run the use case.
+#
+# Plants, tagged {{ DEMO_TAG_KEY }}={{ DEMO_TAG_VALUE }} and named with DEMO_PREFIX:
+#   orphan_volume - a 1 GB gp3 EBS volume attached to nothing (about 0.10 USD/month)
+#   orphan_eip    - an Elastic IP associated with nothing (about 3.65 USD/month while idle)
+#
+# The identity needs ec2:CreateVolume, ec2:DeleteVolume, ec2:DescribeVolumes, ec2:AllocateAddress,
+# ec2:ReleaseAddress, ec2:DescribeAddresses and ec2:CreateTags in the demo account.
+# The volume goes into availability zone "<AWS_REGION>a"; edit availability_zone below if that
+# zone is not enabled in your account.
+#
+# Build:    stackql-deploy build    finops/stack/aws dev --env-file .env
+# Test:     stackql-deploy test     finops/stack/aws dev --env-file .env
+# Teardown: stackql-deploy teardown finops/stack/aws dev --env-file .env
+version: 1
+name: finops-aws
+description: FinOps demo estate (AWS) - deliberately idle resources for openai-agentic-platform-engineering
+providers:
+  - aws::v26.08.00444
+globals:
+  - name: region
+    value: "{{ AWS_REGION }}"
+  - name: availability_zone
+    value: "{{ AWS_REGION }}a"
+  - name: prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: global_tags
+    value:
+      - Key: "{{ DEMO_TAG_KEY }}"
+        Value: "{{ DEMO_TAG_VALUE }}"
+      - Key: managed-by
+        Value: stackql-deploy
+      - Key: stackName
+        Value: "{{ stack_name }}"
+      - Key: stackEnv
+        Value: "{{ stack_env }}"
+resources:
+  - name: orphan_volume
+    description: planted finops finding - EBS volume attached to nothing (finops/aws_unattached_volumes)
+    props:
+      - name: volume_name
+        value: "{{ prefix }}-finops-orphan-volume"
+      - name: volume_size_gb
+        value: 1
+      - name: volume_tags
+        value:
+          - Key: Name
+            Value: "{{ prefix }}-finops-orphan-volume"
+        merge: ['global_tags']
+    exports:
+      - volume_id
+
+  - name: orphan_eip
+    description: planted finops finding - Elastic IP associated with nothing (finops/aws_unassociated_eips)
+    props:
+      - name: eip_name
+        value: "{{ prefix }}-finops-orphan-eip"
+      - name: eip_tags
+        value:
+          - Key: Name
+            Value: "{{ prefix }}-finops-orphan-eip"
+        merge: ['global_tags']
+    exports:
+      - allocation_id

@@ -1,0 +1,33 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM k8s.apps.deployments
+WHERE namespace = '{{ namespace }}'
+  AND cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'
+  AND json_extract(metadata, '$.name') = '{{ deployment_name }}'
+
+/*+ create */
+INSERT INTO k8s.apps.deployments(namespace, cluster_addr, protocol, metadata, spec)
+SELECT
+  '{{ namespace }}',
+  '{{ cluster_addr }}',
+  '{{ protocol }}',
+  '{"name": "{{ deployment_name }}", "namespace": "{{ namespace }}", "labels": {"app": "{{ app_label }}", "{{ demo_tag_key }}": "{{ demo_tag_value }}", "managed-by": "stackql-deploy"}}',
+  '{"replicas": {{ initial_replicas }}, "selector": {"matchLabels": {"app": "{{ app_label }}"}}, "template": {"metadata": {"labels": {"app": "{{ app_label }}", "{{ demo_tag_key }}": "{{ demo_tag_value }}"}}, "spec": {"containers": [{"name": "checkout", "image": "{{ image }}", "args": ["-text=checkout ok", "-listen=:5678"], "ports": [{"containerPort": 5678, "name": "http"}], "readinessProbe": {"httpGet": {"path": "/", "port": 5678}, "initialDelaySeconds": 1, "periodSeconds": 2}, "resources": {"requests": {"cpu": "10m", "memory": "16Mi"}, "limits": {"cpu": "50m", "memory": "32Mi"}}}]}}}'
+
+/*+ statecheck, retries=20, retry_delay=3 */
+SELECT COUNT(*) AS count FROM k8s.apps.deployments
+WHERE namespace = '{{ namespace }}'
+  AND cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'
+  AND json_extract(metadata, '$.name') = '{{ deployment_name }}'
+  AND json_extract(status, '$.readyReplicas') = {{ initial_replicas }}
+
+/*+ exports */
+SELECT '{{ deployment_name }}' AS deployment_name
+
+/*+ delete */
+DELETE FROM k8s.apps.deployments
+WHERE name = '{{ deployment_name }}'
+  AND namespace = '{{ namespace }}'
+  AND cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'

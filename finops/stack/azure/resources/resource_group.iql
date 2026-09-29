@@ -1,0 +1,32 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM azure.resource.resource_groups
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+
+/*+ create */
+INSERT INTO azure.resource.resource_groups(
+   resource_group_name,
+   subscription_id,
+   location,
+   tags
+)
+SELECT
+   '{{ resource_group_name }}',
+   '{{ subscription_id }}',
+   '{{ location }}',
+   '{{ global_tags }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) AS count FROM azure.resource.resource_groups
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND location = '{{ location }}'
+AND provisioning_state = 'Succeeded'
+
+/*+ exports */
+SELECT '{{ resource_group_name }}' AS resource_group_name
+
+/*+ delete, retries=3, retry_delay=10 */
+DELETE FROM azure.resource.resource_groups
+WHERE resource_group_name = '{{ resource_group_name }}'
+AND subscription_id = '{{ subscription_id }}'

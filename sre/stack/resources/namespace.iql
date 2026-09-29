@@ -1,0 +1,26 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM k8s.core.namespaces
+WHERE cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'
+  AND json_extract(metadata, '$.name') = '{{ namespace }}'
+
+/*+ create */
+INSERT INTO k8s.core.namespaces(cluster_addr, protocol, metadata)
+SELECT '{{ cluster_addr }}', '{{ protocol }}', '{{ namespace_metadata }}'
+
+/*+ statecheck, retries=5, retry_delay=3 */
+SELECT COUNT(*) AS count FROM k8s.core.namespaces
+WHERE cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'
+  AND json_extract(metadata, '$.name') = '{{ namespace }}'
+  AND json_extract(status, '$.phase') = 'Active'
+  AND json_extract(metadata, '$.labels.{{ demo_tag_key }}') = '{{ demo_tag_value }}'
+
+/*+ exports */
+SELECT '{{ namespace }}' AS namespace
+
+/*+ delete */
+DELETE FROM k8s.core.namespaces
+WHERE name = '{{ namespace }}'
+  AND cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'

@@ -1,0 +1,45 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM azure.network.public_ip_addresses
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ orphan_pip_name }}'
+
+/*+ create */
+INSERT INTO azure.network.public_ip_addresses(
+   public_ip_address_name,
+   resource_group_name,
+   subscription_id,
+   location,
+   sku,
+   properties,
+   tags
+)
+SELECT
+   '{{ orphan_pip_name }}',
+   '{{ resource_group_name }}',
+   '{{ subscription_id }}',
+   '{{ location }}',
+   '{"name": "Standard", "tier": "Regional"}',
+   '{"publicIPAllocationMethod": "Static", "publicIPAddressVersion": "IPv4"}',
+   '{{ global_tags }}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+SELECT COUNT(*) AS count FROM azure.network.public_ip_addresses
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ orphan_pip_name }}'
+AND provisioning_state = 'Succeeded'
+AND ip_configuration IS NULL
+
+/*+ exports */
+SELECT id AS orphan_public_ip_id
+FROM azure.network.public_ip_addresses
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ orphan_pip_name }}'
+
+/*+ delete */
+DELETE FROM azure.network.public_ip_addresses
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND public_ip_address_name = '{{ orphan_pip_name }}'

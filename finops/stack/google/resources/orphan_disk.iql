@@ -1,0 +1,40 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM google.compute.disks
+WHERE project = '{{ project }}'
+AND zone = '{{ zone }}'
+AND name = '{{ disk_name }}'
+
+/*+ create */
+INSERT INTO google.compute.disks(
+  project,
+  zone,
+  data__name,
+  data__sizeGb,
+  data__type,
+  data__labels,
+  data__description
+)
+SELECT
+  '{{ project }}',
+  '{{ zone }}',
+  '{{ disk_name }}',
+  '{{ disk_size_gb }}',
+  'zones/{{ zone }}/diskTypes/pd-standard',
+  '{{ global_labels }}',
+  'finops demo - persistent disk attached to nothing'
+
+/*+ statecheck, retries=6, retry_delay=5 */
+SELECT COUNT(*) AS count FROM google.compute.disks
+WHERE project = '{{ project }}'
+AND zone = '{{ zone }}'
+AND name = '{{ disk_name }}'
+AND status = 'READY'
+
+/*+ exports */
+SELECT '{{ disk_name }}' AS orphan_disk_name
+
+/*+ delete */
+DELETE FROM google.compute.disks
+WHERE project = '{{ project }}'
+AND zone = '{{ zone }}'
+AND disk = '{{ disk_name }}'

@@ -1,0 +1,45 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM azure.compute.disks
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ disk_name }}'
+
+/*+ create */
+INSERT INTO azure.compute.disks(
+  disk_name,
+  resource_group_name,
+  subscription_id,
+  location,
+  sku,
+  properties,
+  tags
+)
+SELECT
+  '{{ disk_name }}',
+  '{{ resource_group_name }}',
+  '{{ subscription_id }}',
+  '{{ location }}',
+  '{"name": "Standard_LRS"}',
+  '{"creationData": {"createOption": "Empty"}, "diskSizeGB": {{ disk_size_gb }}}',
+  '{{ global_tags }}'
+
+/*+ statecheck, retries=6, retry_delay=5 */
+SELECT COUNT(*) AS count FROM azure.compute.disks
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ disk_name }}'
+AND provisioning_state = 'Succeeded'
+AND disk_state = 'Unattached'
+
+/*+ exports */
+SELECT id AS orphan_disk_id
+FROM azure.compute.disks
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND name = '{{ disk_name }}'
+
+/*+ delete */
+DELETE FROM azure.compute.disks
+WHERE subscription_id = '{{ subscription_id }}'
+AND resource_group_name = '{{ resource_group_name }}'
+AND disk_name = '{{ disk_name }}'

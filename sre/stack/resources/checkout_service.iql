@@ -1,0 +1,33 @@
+/*+ exists */
+SELECT COUNT(*) AS count FROM k8s.core.services
+WHERE namespace = '{{ namespace }}'
+  AND cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'
+  AND json_extract(metadata, '$.name') = '{{ service_name }}'
+
+/*+ create */
+INSERT INTO k8s.core.services(namespace, cluster_addr, protocol, metadata, spec)
+SELECT
+  '{{ namespace }}',
+  '{{ cluster_addr }}',
+  '{{ protocol }}',
+  '{"name": "{{ service_name }}", "namespace": "{{ namespace }}", "labels": {"app": "{{ app_label }}", "{{ demo_tag_key }}": "{{ demo_tag_value }}", "managed-by": "stackql-deploy"}}',
+  '{"type": "ClusterIP", "selector": {"app": "{{ app_label }}"}, "ports": [{"name": "http", "port": 80, "targetPort": 5678, "protocol": "TCP"}]}'
+
+/*+ statecheck, retries=5, retry_delay=3 */
+SELECT COUNT(*) AS count FROM k8s.core.services
+WHERE namespace = '{{ namespace }}'
+  AND cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'
+  AND json_extract(metadata, '$.name') = '{{ service_name }}'
+  AND json_extract(spec, '$.type') = 'ClusterIP'
+
+/*+ exports */
+SELECT '{{ service_name }}' AS service_name
+
+/*+ delete */
+DELETE FROM k8s.core.services
+WHERE name = '{{ service_name }}'
+  AND namespace = '{{ namespace }}'
+  AND cluster_addr = '{{ cluster_addr }}'
+  AND protocol = '{{ protocol }}'
