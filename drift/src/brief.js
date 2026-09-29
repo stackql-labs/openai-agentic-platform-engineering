@@ -1,10 +1,15 @@
 // Brief: the mini-tier model (SWEEP_MODEL) classifies the deltas - only the deltas, never the
-// estate - with a json_schema structured output. It may call the read-only tools bridged from the
-// MCP server (mutation and admin tools are filtered out in bridgeTools) to look something up, but
-// the deltas are the whole input and tool use is bounded by DRIFT_MAX_TOOL_CALLS.
+// estate - with a json_schema structured output. Its instructions are the intent prompt
+// drift/prompts/brief.md plus the shared discovery briefing drift/prompts/discovery.md and the
+// server's own instructions (MCP resource stackql://docs/instructions). It may call the read-only
+// tools bridged from the MCP server (mutation and admin tools are filtered out in bridgeTools) to
+// add context to an ambiguous delta, discovering the resource through the StackQL discovery tools
+// or the query library; tool use is bounded by DRIFT_MAX_TOOL_CALLS.
 import OpenAI from 'openai';
 import { addUsage, emptyUsage, usageOf } from './cost.js';
+import { settings } from './env.js';
 import { bridgeTools, textOf } from './mcp.js';
+import { composeInstructions, loadPrompt, readServerInstructions } from './prompts.js';
 
 export const CHANGE_KINDS = ['added', 'removed', 'changed'];
 export const CLASSIFICATIONS = ['benign', 'material'];
@@ -35,14 +40,27 @@ export const BRIEF_SCHEMA = {
   },
 };
 
-export const INSTRUCTIONS = `You are the hourly drift briefing for a demo cloud estate (AWS and Azure).
-You receive only the deltas: rows that changed between two snapshots of network control-plane state
-(security groups, EC2 instances, network security groups). Classify each change as benign (tag churn,
-naming, versioning or other configuration with no security consequence) or material (network exposure,
-privilege, encryption, anything that widens access) and give a one-sentence reason. Then write a
-one-paragraph brief that cites resource ids. Do not speculate about resources that are not in the
-input. You have read-only SQL tools against the providers if you need to confirm a detail; the deltas
-are normally sufficient and you must not enumerate the estate.`;
+// Tenancy and policy values for the prompt placeholders. A provider that is not configured still
+// renders (its placeholder says so) because the snapshot skipped it and no delta names it.
+export function promptValues(cfg = settings(), maxToolCalls = cfg.maxToolCalls) {
+  return {
+    aws_region: cfg.awsRegion || 'not configured',
+    azure_subscription_id: cfg.azureSubscriptionId || 'not configured',
+    demo_prefix: cfg.demoPrefix,
+    demo_tag_key: cfg.demoTagKey,
+    demo_tag_value: cfg.demoTagValue,
+    max_tool_calls: String(maxToolCalls),
+  };
+}
+
+// brief.md + discovery.md + the server's published instructions (best effort).
+export async function buildInstructions({ server, values, log = console.log }) {
+  const role = loadPrompt('brief', values);
+  const discovery = loadPrompt('discovery', values);
+  const serverInstructions = server ? await readServerInstructions(server, { log }) : '';
+  if (serverInstructions) log(`  server instructions: ${serverInstructions.length} chars appended from stackql://docs/instructions`);
+  return composeInstructions({ role, discovery, serverInstructions });
+}
 
 export function parseBrief(text) {
   const b = JSON.parse(text);
@@ -61,15 +79,16 @@ function finalText(response) {
   return response.output_text || '';
 }
 
-export async function briefDeltas({ deltas, server, model, effort, maxToolCalls = 6, log = console.log, client }) {
+export async function briefDeltas({ deltas, server, model, effort, maxToolCalls = 6, log = console.log, client, instructions }) {
   if (!model) throw new Error('SWEEP_MODEL is not set');
   const openai = client || new OpenAI();
   const tools = bridgeTools(await server.listTools());
+  const system = instructions || (await buildInstructions({ server, values: promptValues(settings(), maxToolCalls), log }));
   const usage = { requests: 0, tokens: emptyUsage(), responseIds: [], toolCalls: {}, selectCalls: 0, mutationCalls: 0 };
   const base = {
     model,
     reasoning: { effort },
-    instructions: INSTRUCTIONS,
+    instructions: system,
     tools,
     text: { format: { type: 'json_schema', name: 'drift_brief', strict: true, schema: BRIEF_SCHEMA } },
     store: true,

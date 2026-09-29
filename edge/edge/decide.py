@@ -1,7 +1,10 @@
-"""Decision step (frontier tier, no tools). Given the recon report and the threshold policy from
-.env it returns a structured decision. The model supplies the judgement and the rationale; code
-enforces the policy envelope (only the two configured thresholds can ever be proposed) and
-renders the rollback statement from the query file - the model never authors SQL."""
+"""Decision step (frontier tier, read-only server). Given the recon report and the threshold policy
+from .env (edge/prompts/decide.md) it returns a structured decision. On tighten it also returns the
+exact statement it proposes, having discovered the write contract itself (query library, then
+list_methods / describe_method on the resource the recon read), plus a verification SELECT and a
+rollback statement. The model supplies the judgement and the statements; code enforces the policy
+envelope (only the two configured thresholds can ever be proposed) and the gate checks every
+statement against its allowlist before an operator sees it. The model never executes anything."""
 
 from __future__ import annotations
 
@@ -12,25 +15,12 @@ from typing import Literal
 from agents import Runner
 from pydantic import BaseModel, Field
 
-from .config import settings
 from .costs import RunLedger
-from .queries import render_query
+from .mcp import StackQLServer
 from .recon import ReconReport
 from .tiers import make_agent, tier
 
-DECIDE_INSTRUCTIONS = """You decide whether to tighten one Cloudflare rate limiting rule.
-
-You have no tools. You get a recon report (live zone analytics over a short window plus the
-current rule) and a policy. Apply the policy exactly:
-
-- tighten when requests_per_second >= elevated_rps AND the current threshold is greater than
-  tightened_threshold; then new_threshold = tightened_threshold
-- otherwise hold, with new_threshold = the current threshold
-
-Write a rationale of two to four sentences that cites the numbers (requests per second against
-the elevated_rps line, the non-2xx share, country concentration, current threshold and period)
-and a one or two sentence risk note: what a block at the new threshold would affect and what
-would be wrong if the traffic is legitimate. Matter of fact, no adjectives."""
+DECIDE_MAX_TURNS = 12
 
 
 @dataclass(frozen=True)
@@ -46,6 +36,17 @@ class Decision(BaseModel):
     new_threshold: int = Field(description="requests per period after this decision")
     rationale: str
     risk: str = Field(default="", description="what the change affects if the read is wrong")
+    statement: str = Field(
+        default="",
+        description="on tighten: the single REPLACE statement to execute, discovered via describe_method; empty on hold",
+    )
+    verification_select: str = Field(
+        default="",
+        description="on tighten: a flat SELECT, validated, that returns the rule's requests_per_period after the change",
+    )
+    rollback_statement: str = Field(
+        default="", description="on tighten: the same statement with the previous threshold"
+    )
 
 
 def policy_action(report: ReconReport, policy: Policy) -> tuple[str, int]:
@@ -59,7 +60,9 @@ def policy_action(report: ReconReport, policy: Policy) -> tuple[str, int]:
 
 
 def enforce_policy(decision: Decision, report: ReconReport, policy: Policy) -> Decision:
-    """Code has the last word on what may be proposed to the gate."""
+    """Code has the last word on what may be proposed to the gate. When the override changes the
+    action or the threshold, the model's statements no longer describe the decision: they are
+    dropped, and a tighten with no statement is reported by the gate as unexecutable."""
     action, threshold = policy_action(report, policy)
     if (decision.action, decision.new_threshold) == (action, threshold):
         return decision
@@ -71,24 +74,28 @@ def enforce_policy(decision: Decision, report: ReconReport, policy: Policy) -> D
                 f"{decision.rationale} [policy override: model proposed "
                 f"{decision.action} -> {decision.new_threshold}; policy gives {action} -> {threshold}]"
             ),
+            "statement": "",
+            "verification_select": "",
+            "rollback_statement": "",
         }
     )
 
 
-def rollback_statement(previous_threshold: int) -> str:
-    """The statement that puts the previous threshold back, rendered from the query file."""
-    return render_query(
-        "edge/tighten_rate_limit",
-        threshold=previous_threshold,
-        demo_prefix=settings().demo_prefix,
-    )
-
-
-async def run_decision(report: ReconReport, policy: Policy, ledger: RunLedger) -> Decision:
+async def run_decision(
+    server: StackQLServer,
+    instructions: str,
+    report: ReconReport,
+    policy: Policy,
+    ledger: RunLedger,
+) -> Decision:
     agent = make_agent(
-        "reasoning", name="edge-decision", instructions=DECIDE_INSTRUCTIONS, output_type=Decision
+        "reasoning",
+        name="edge-decision",
+        instructions=instructions,
+        mcp_servers=[server],
+        output_type=Decision,
     )
     prompt = json.dumps({"recon": report.model_dump(), "policy": asdict(policy)}, indent=2)
-    result = await Runner.run(agent, prompt, max_turns=2)
+    result = await Runner.run(agent, prompt, max_turns=DECIDE_MAX_TURNS)
     ledger.record("decision", tier("reasoning").model, result)
     return enforce_policy(result.final_output_as(Decision), report, policy)

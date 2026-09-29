@@ -1,17 +1,20 @@
-//! Query library loader. All SQL lives in `sre/queries/`, one file per query with a header:
+//! Loader for the code-owned SQL under `sre/queries/` (the gate's target assertion, the fallback
+//! verification SELECT, the `--reset` statement) and the illustrative queries under
+//! `sre/queries/examples/`. One file per query with a header:
 //!
 //! ```text
-//! -- id: sre/deployment_state
+//! -- id: sre/assert_demo_target
 //! -- providers: k8s
 //! -- params: sre_target_deployment, k8s_namespace, kube_cluster_addr, kube_protocol
-//! -- expected_columns: name, namespace, spec_replicas, ...
+//! -- expected_columns: name, namespace, ...
 //! -- description: one line
 //! <SQL with {{ param }} placeholders>
 //! ```
 //!
 //! Placeholders resolve from explicit code overrides, then the settings context, then the
 //! upper-cased environment variable of the same name. A missing value fails naming the variable.
-//! Agent code never carries inline SQL: it loads by id and renders.
+//! The same `substitute` renders the prompt files. The model never receives these files: it
+//! discovers its own SELECTs through the StackQL discovery tools and the query library.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -46,38 +49,44 @@ impl Query {
     /// Substitute every `{{ param }}`. `overrides` win over `ctx`, which wins over the
     /// environment (`param` -> `PARAM`).
     pub fn render(&self, ctx: &BTreeMap<String, String>, overrides: &[(&str, &str)]) -> Result<String> {
-        let mut out = String::with_capacity(self.sql.len());
-        let mut rest = self.sql.as_str();
-        while let Some(start) = rest.find("{{") {
-            out.push_str(&rest[..start]);
-            let after = &rest[start + 2..];
-            let end = after
-                .find("}}")
-                .with_context(|| format!("query {}: unterminated placeholder", self.id))?;
-            let key = after[..end].trim();
-            if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                bail!("query {}: bad placeholder name {key:?}", self.id);
-            }
-            let value = overrides
-                .iter()
-                .find(|(k, _)| *k == key)
-                .map(|(_, v)| (*v).to_string())
-                .or_else(|| ctx.get(key).cloned())
-                .or_else(|| std::env::var(key.to_ascii_uppercase()).ok())
-                .filter(|v| !v.trim().is_empty())
-                .with_context(|| {
-                    format!(
-                        "query {}: no value for {{{{ {key} }}}} - set {} in the repo-root .env",
-                        self.id,
-                        key.to_ascii_uppercase()
-                    )
-                })?;
-            out.push_str(&value);
-            rest = &after[end + 2..];
-        }
-        out.push_str(rest);
+        let out = substitute(&self.sql, ctx, overrides, &format!("query {}", self.id))?;
         Ok(out.trim().trim_end_matches(';').trim().to_string())
     }
+}
+
+/// Substitute every `{{ name }}` in `text`. `overrides` win over `ctx`, which wins over the
+/// upper-cased environment variable. A missing value fails naming the variable to set.
+pub fn substitute(text: &str, ctx: &BTreeMap<String, String>, overrides: &[(&str, &str)], label: &str) -> Result<String> {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("{{") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 2..];
+        let end = after
+            .find("}}")
+            .with_context(|| format!("{label}: unterminated placeholder"))?;
+        let key = after[..end].trim();
+        if key.is_empty() || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            bail!("{label}: bad placeholder name {key:?}");
+        }
+        let value = overrides
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| (*v).to_string())
+            .or_else(|| ctx.get(key).cloned())
+            .or_else(|| std::env::var(key.to_ascii_uppercase()).ok())
+            .filter(|v| !v.trim().is_empty())
+            .with_context(|| {
+                format!(
+                    "{label}: no value for {{{{ {key} }}}} - set {} in the repo-root .env",
+                    key.to_ascii_uppercase()
+                )
+            })?;
+        out.push_str(&value);
+        rest = &after[end + 2..];
+    }
+    out.push_str(rest);
+    Ok(out)
 }
 
 fn split_list(v: &str) -> Vec<String> {
@@ -147,19 +156,27 @@ pub fn parse(text: &str, path: &Path, fallback_id: &str) -> Query {
     }
 }
 
-/// Every `*.sql` under `dir`, sorted by file name.
+/// Every `*.sql` under `dir` and its immediate subdirectories (`examples/`), sorted by path.
 pub fn list_queries(dir: &Path) -> Result<Vec<Query>> {
-    let mut paths: Vec<PathBuf> = fs::read_dir(dir)
-        .with_context(|| format!("reading query directory {}", dir.display()))?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().map(|x| x == "sql").unwrap_or(false))
-        .collect();
+    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(d) = dirs.pop() {
+        for entry in fs::read_dir(&d).with_context(|| format!("reading query directory {}", d.display()))? {
+            let p = entry?.path();
+            if p.is_dir() && d == dir {
+                dirs.push(p);
+            } else if p.extension().map(|x| x == "sql").unwrap_or(false) {
+                paths.push(p);
+            }
+        }
+    }
     paths.sort();
     let mut out = Vec::new();
     for p in paths {
         let text = fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
-        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("query");
-        out.push(parse(&text, &p, &format!("sre/{stem}")));
+        let rel = p.strip_prefix(dir).unwrap_or(&p).with_extension("");
+        let fallback = format!("sre/{}", rel.to_string_lossy().replace('\\', "/"));
+        out.push(parse(&text, &p, &fallback));
     }
     Ok(out)
 }
@@ -237,26 +254,29 @@ mod tests {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("queries");
         let all = list_queries(&dir).unwrap();
         let ids: Vec<&str> = all.iter().map(|q| q.id.as_str()).collect();
+        // code-owned: the gate assertion, the fallback verification, the --reset statement;
+        // examples: at most two illustrative SELECTs the prompt may cite
         for want in [
-            "sre/deployment_state",
-            "sre/pods_for_deployment",
-            "sre/warning_events",
-            "sre/verify_replicas",
             "sre/assert_demo_target",
-            "sre/scale_deployment",
+            "sre/verify_replicas",
+            "sre/reset_scale",
+            "sre/examples/deployment_state",
+            "sre/examples/warning_events",
         ] {
             assert!(ids.contains(&want), "missing {want} in {ids:?}");
         }
+        let examples = all.iter().filter(|q| q.id.starts_with("sre/examples/")).count();
+        assert!(examples <= 2, "at most two examples, found {examples}");
+        assert_eq!(all.len(), 5, "no query pack: {ids:?}");
         let mut c = ctx();
         c.insert("sre_target_deployment".into(), "agentic-demo-checkout".into());
-        c.insert("sre_app_label".into(), "checkout".into());
         c.insert("demo_tag_key".into(), "purpose".into());
         for q in &all {
             assert_eq!(q.providers, vec!["k8s"], "{}", q.id);
-            let sql = q.render(&c, &[("replicas", "2")]).unwrap();
+            let sql = q.render(&c, &[("replicas", "1")]).unwrap();
             assert!(sql.contains("cluster_addr = 'localhost:8001'"), "{}: {sql}", q.id);
             assert!(sql.contains("protocol = 'http'"), "{}: {sql}", q.id);
-            assert_eq!(q.is_mutation(), q.id == "sre/scale_deployment", "{}", q.id);
+            assert_eq!(q.is_mutation(), q.id == "sre/reset_scale", "{}", q.id);
         }
     }
 }

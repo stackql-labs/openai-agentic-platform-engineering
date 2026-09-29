@@ -28,11 +28,13 @@ export const FindingSchema = z.object({
     ),
   severity: SeveritySchema,
   title: z.string().describe('One line, matter of fact'),
-  evidence: z.string().describe('Query id and the supporting row values, as text'),
+  evidence: z.string().describe('The SELECT that produced the row and the supporting row values, as text'),
   proposed_remediation: z
     .string()
     .describe('The StackQL statement or configuration change that would remove the grant - never executed by this program'),
-  query_id: z.string().describe('entitlements/<name> the evidence came from'),
+  query_id: z
+    .string()
+    .describe('Where the SELECT came from: a query library id, an entitlements/examples/<name> id, or "discovered"'),
   monthly_cost_estimate_usd: z.number().nullable().describe('Not used by this use case; always null'),
 });
 export type Finding = z.infer<typeof FindingSchema>;

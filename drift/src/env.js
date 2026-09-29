@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 export const DRIFT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const REPO_ROOT = path.resolve(DRIFT_DIR, '..');
 export const QUERIES_DIR = path.join(DRIFT_DIR, 'queries');
+export const PROMPTS_DIR = path.join(DRIFT_DIR, 'prompts');
 export const STACK_DIR = path.join(DRIFT_DIR, 'stack');
 export const ENV_FILE = path.join(REPO_ROOT, '.env');
 

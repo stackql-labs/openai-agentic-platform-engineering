@@ -17,7 +17,8 @@ Tool surface, verified with `server_info` against stackql v0.12.718:
 Enforcement, not documentation: every server this use case starts runs in `read_only` mode
 (the server refuses every write), and a static tool filter hides the mutation and admin tools
 from the models on top of that. There is no mutation path in this use case at all: the DELETE
-statements it produces are drafted for human review only.
+and EXEC statements it produces are drafted for human review only. The models use the
+discovery and library tools to find resources and IO contracts; nothing is pre-scripted.
 """
 
 from __future__ import annotations

@@ -27,9 +27,10 @@ commands
   setup                    pull the aws and azure providers into STACKQL_APPROOT and print server_info
   snapshot [--label text]  snapshot the estate into snapshots/drift.db (API calls only, no model call)
   run [--no-snapshot]      take a snapshot, diff it against the previous one in SQL, and brief on the
-                           deltas with SWEEP_MODEL; no deltas -> one line and no model call
-      [--label text]
-  validate                 run validate_select_query for every SELECT in drift/queries and the stack anchors
+      [--label text]         deltas with SWEEP_MODEL from the intent prompt drift/prompts/brief.md (plus
+                           drift/prompts/discovery.md and the server's stackql://docs/instructions);
+                           no deltas -> one line and no model call
+  validate                 run validate_select_query for every code-owned SELECT in drift/queries and the stack anchors
   perturb [--restore]      operator tooling: simulate an out-of-band change on the stack's security
       [--approve|--decline]  group (aws) and network security group (azure) through an approval gate;
       [--provider p]         --restore reverses it. The only path that opens a full_access server.

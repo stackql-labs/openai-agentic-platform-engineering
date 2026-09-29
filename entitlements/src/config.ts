@@ -12,7 +12,9 @@ import { config as loadDotenv } from 'dotenv';
 export const PKG_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const REPO_ROOT = path.resolve(PKG_DIR, '..');
 export const ENV_FILE = path.join(REPO_ROOT, '.env');
+export const PROMPTS_DIR = path.join(PKG_DIR, 'prompts');
 export const QUERIES_DIR = path.join(PKG_DIR, 'queries');
+export const EXAMPLES_DIR = path.join(QUERIES_DIR, 'examples');
 export const RUNS_DIR = path.join(REPO_ROOT, 'runs');
 export const PRICING_FILE = path.join(REPO_ROOT, 'pricing.json');
 
@@ -100,21 +102,6 @@ export function settings(overrides: { idp?: string } = {}): Settings {
   };
 }
 
-/**
- * Query parameters that are derived rather than read one-to-one from the environment.
- * The loader falls back to these when no <PARAM_UPPERCASE> variable is set.
- */
-export function derivedParams(): Record<string, string> {
-  const demoPrefix = env('DEMO_PREFIX', 'agentic-demo');
-  const oktaDomain = env('OKTA_DOMAIN');
-  return {
-    demo_prefix: demoPrefix,
-    aws_iam_region: 'us-east-1',
-    idp_privileged_group: `${demoPrefix}-cloud-admins`,
-    okta_subdomain: oktaDomain === '' ? '' : (oktaDomain.split('.')[0] ?? ''),
-  };
-}
-
 /** Credentials StackQL needs per provider, following its environment variable conventions. */
 export const PROVIDER_ENV: Record<string, string[]> = {
   aws: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_ACCOUNT_ID'],
@@ -129,31 +116,69 @@ export function providerConfigured(provider: string): boolean {
   return (PROVIDER_ENV[provider] ?? []).every((v) => env(v) !== '');
 }
 
-/** The tenancy the sweep is pinned to, for prompts and the run record. */
-export function tenancyLines(s: Settings): string[] {
-  const lines = [
-    `AWS account ${env('AWS_ACCOUNT_ID', '(unset)')} (IAM is global; the provider signs against us-east-1)`,
-    `Azure subscription ${env('AZURE_SUBSCRIPTION_ID', '(unset)')}`,
-    `Google project ${env('GOOGLE_PROJECT', '(unset)')}`,
-    `GitHub org ${env('GITHUB_ORG', '(unset)')}`,
-  ];
+export const NOT_CONFIGURED = 'not configured - skip this provider';
+
+/** The IdP's display name, tenancy identifier and Okta subdomain (empty for Entra ID). */
+export function idpIdentity(s: Settings): { name: string; tenant: string; oktaSubdomain: string } {
   if (s.idpProvider === 'okta') {
-    lines.push(`IdP: Okta org ${env('OKTA_DOMAIN', '(unset)')}`);
-  } else {
-    lines.push(`IdP: Microsoft Entra ID tenant ${env('AZURE_TENANT_ID', '(unset)')}`);
+    const domain = env('OKTA_DOMAIN');
+    return {
+      name: 'Okta',
+      tenant: providerConfigured('okta') ? `Okta org ${domain}` : NOT_CONFIGURED,
+      oktaSubdomain: domain.split('.')[0] ?? '',
+    };
   }
-  lines.push(
-    `Demo tag ${s.demoTagKey}=${s.demoTagValue}; demo name prefix ${s.demoPrefix}; privileged IdP group ${derivedParamsWithEnv().idp_privileged_group}`,
-  );
-  return lines;
+  return {
+    name: 'Microsoft Entra ID',
+    tenant: providerConfigured('entra_id') ? `Entra ID tenant ${env('AZURE_TENANT_ID')}` : NOT_CONFIGURED,
+    oktaSubdomain: '',
+  };
 }
 
-/** derivedParams() with the matching environment variables applied on top. */
-export function derivedParamsWithEnv(): Record<string, string> {
-  const out = derivedParams();
-  for (const k of Object.keys(out)) {
-    const v = env(k.toUpperCase());
-    if (v !== '') out[k] = v;
-  }
-  return out;
+/** The tenancy the sweep is pinned to, one line per provider, for prompts and the report. */
+export function tenancyLines(s: Settings): string[] {
+  const idp = idpIdentity(s);
+  const id = (provider: string, label: string, value: string) =>
+    providerConfigured(provider) ? `${label} ${value}` : `${label}: ${NOT_CONFIGURED}`;
+  return [
+    id('aws', 'AWS account', `${env('AWS_ACCOUNT_ID')} (IAM is global; the provider signs against ${env('AWS_IAM_REGION', 'us-east-1')})`),
+    id('azure', 'Azure subscription', env('AZURE_SUBSCRIPTION_ID')),
+    id('google', 'Google project', env('GOOGLE_PROJECT')),
+    id('github', 'GitHub org', env('GITHUB_ORG')),
+    `IdP (${s.idpProvider}): ${idp.tenant}`,
+    `Demo tag ${s.demoTagKey}=${s.demoTagValue}; demo name prefix ${s.demoPrefix}; privileged IdP group ${privilegedGroup(s)}`,
+  ];
+}
+
+export function privilegedGroup(s: Settings): string {
+  return env('IDP_PRIVILEGED_GROUP', `${s.demoPrefix}-cloud-admins`);
+}
+
+/**
+ * Values for the `{{ placeholder }}`s in prompts/*.md and queries/examples/*.sql. Tenancy ids
+ * of a provider without credentials render as "not configured" so the prompt still loads and
+ * tells the model to skip it; a placeholder with no entry here fails in the prompt loader.
+ */
+export function promptValues(s: Settings): Record<string, string> {
+  const idp = idpIdentity(s);
+  const tenancy = (provider: string, v: string) => (providerConfigured(provider) ? v : NOT_CONFIGURED);
+  return {
+    idp_provider: s.idpProvider,
+    idp_name: idp.name,
+    idp_tenant: idp.tenant,
+    okta_subdomain: idp.oktaSubdomain,
+    aws_account_id: tenancy('aws', env('AWS_ACCOUNT_ID')),
+    aws_iam_region: env('AWS_IAM_REGION', 'us-east-1'),
+    azure_subscription_id: tenancy('azure', env('AZURE_SUBSCRIPTION_ID')),
+    google_project: tenancy('google', env('GOOGLE_PROJECT')),
+    github_org: tenancy('github', env('GITHUB_ORG')),
+    demo_prefix: s.demoPrefix,
+    demo_tag_key: s.demoTagKey,
+    demo_tag_value: s.demoTagValue,
+    idp_privileged_group: privilegedGroup(s),
+    escalation_severity: s.escalationSeverity,
+    providers_in_scope: tenancyLines(s)
+      .map((l) => `- ${l}`)
+      .join('\n'),
+  };
 }

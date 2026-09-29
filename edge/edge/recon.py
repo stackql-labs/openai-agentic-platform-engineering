@@ -1,37 +1,26 @@
-"""Recon agent (mini tier, read-only server). Runs the two SELECTs from edge/queries/ verbatim
-and returns a structured report. The arithmetic (totals, shares, requests per second) is
-recomputed by code from the rows the model saw, so the decision never rests on model arithmetic."""
+"""Recon agent (mini tier, read-only server). It gets an intent (edge/prompts/recon.md): traffic to
+the demo zone in the window and the rate limit rule currently applied. It finds the resources
+itself through the query library and the discovery tools, and returns a structured report. The
+arithmetic (totals, shares, requests per second) is recomputed by code from the rows the model saw,
+so the decision never rests on model arithmetic, and the statements it ran are collected from the
+tool calls, not from what it says it ran."""
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
 from agents import Runner
-from agents.items import ToolCallOutputItem
+from agents.items import ToolCallItem, ToolCallOutputItem
 from pydantic import BaseModel, Field
 
-from .costs import RunLedger
+from .costs import RunLedger, tool_name_of
 from .mcp import StackQLServer, rows_from_output
-from .queries import render_query
 from .tiers import make_agent, tier
 
-RECON_INSTRUCTIONS = """You are the recon agent for one Cloudflare zone.
-
-You are given exactly two SELECT statements. Run each one once with run_select_query (pass
-format "json"), verbatim - do not rewrite, reorder, filter or compose any other SQL, and do not
-call any other tool. Then fill in the report from the rows you got back:
-
-- total_requests: sum of the `requests` column across all rows of statement 1
-- distinct_countries: number of distinct client_country_name values
-- non_2xx_requests: sum of `requests` for rows whose edge_response_status is outside 200-299
-- non_2xx_share: non_2xx_requests / total_requests (0 when there are no requests)
-- requests_per_second: total_requests / window_seconds
-- top_countries: up to five country names by requests, highest first
-- ruleset_id, rule_id, threshold, period: from the single row of statement 2
-- notes: one or two sentences: anything unusual (a single status code dominating, one country
-  dominating, an empty window). Matter of fact, no adjectives.
-
-If a statement returns no rows, report zeros (or empty strings) and say so in notes."""
+_FROM_RE = re.compile(r"\bFROM\s+([a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+)", re.IGNORECASE)
+RECON_MAX_TURNS = 14
 
 
 class ReconReport(BaseModel):
@@ -43,9 +32,17 @@ class ReconReport(BaseModel):
     top_countries: list[str] = Field(default_factory=list)
     ruleset_id: str = ""
     rule_id: str = ""
+    rule_description: str = ""
     threshold: int = Field(default=0, description="current requests_per_period of the rule")
     period: int = Field(default=0, description="seconds")
+    rules_json: str = Field(default="", description="the current rules array as returned, JSON")
     notes: str = ""
+    statements: list[str] = Field(
+        default_factory=list, description="filled by code from the tool calls: the SELECTs run"
+    )
+    resources_read: list[str] = Field(
+        default_factory=list, description="filled by code: provider.service.resource per statement"
+    )
 
 
 def _int(v: Any) -> int:
@@ -53,6 +50,38 @@ def _int(v: Any) -> int:
         return int(float(v))
     except (TypeError, ValueError):
         return 0
+
+
+def _first_rule(rules: Any) -> dict[str, Any] | None:
+    if isinstance(rules, str):
+        try:
+            rules = json.loads(rules)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(rules, list) and rules and isinstance(rules[0], dict):
+        return rules[0]
+    return None
+
+
+def statements_run(items: list[Any]) -> list[str]:
+    """The SQL of every run_select_query call in the run, in order, from the tool call items."""
+    out: list[str] = []
+    for item in items:
+        if not isinstance(item, ToolCallItem) or tool_name_of(item) != "run_select_query":
+            continue
+        raw = item.raw_item
+        args = getattr(raw, "arguments", None)
+        if args is None and isinstance(raw, dict):
+            args = raw.get("arguments")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        sql = (args or {}).get("sql") if isinstance(args, dict) else None
+        if sql:
+            out.append(str(sql).strip())
+    return out
 
 
 def cross_check(report: ReconReport, items: list[Any], window_seconds: int) -> ReconReport:
@@ -67,6 +96,18 @@ def cross_check(report: ReconReport, items: list[Any], window_seconds: int) -> R
                 traffic.append(row)
             elif "threshold" in row and "rule_id" in row:
                 rule = row
+            elif "rules" in row:
+                first = _first_rule(row.get("rules"))
+                if first is not None:
+                    rl = first.get("ratelimit") or {}
+                    rule = {
+                        "id": row.get("id"),
+                        "rule_id": first.get("id"),
+                        "description": first.get("description"),
+                        "threshold": rl.get("requests_per_period"),
+                        "period": rl.get("period"),
+                        "rules": row.get("rules"),
+                    }
     update: dict[str, Any] = {}
     notes: list[str] = []
     if traffic:
@@ -103,32 +144,42 @@ def cross_check(report: ReconReport, items: list[Any], window_seconds: int) -> R
         update.update(
             ruleset_id=str(rule.get("id") or report.ruleset_id),
             rule_id=str(rule.get("rule_id") or report.rule_id),
+            rule_description=str(rule.get("description") or report.rule_description),
             threshold=_int(rule.get("threshold")) or report.threshold,
             period=_int(rule.get("period")) or report.period,
         )
+        raw_rules = rule.get("rules")
+        if raw_rules:
+            update["rules_json"] = (
+                raw_rules if isinstance(raw_rules, str) else json.dumps(raw_rules)
+            )
+    statements = statements_run(items)
+    if statements:
+        update["statements"] = statements
+        seen: list[str] = []
+        for sql in statements:
+            for name in _FROM_RE.findall(sql):
+                if name.lower() not in seen:
+                    seen.append(name.lower())
+        update["resources_read"] = seen
     if notes:
         update["notes"] = (report.notes + " " + "; ".join(notes)).strip()
     return report.model_copy(update=update)
 
 
 async def run_recon(
-    server: StackQLServer, since: str, until: str, window_seconds: int, ledger: RunLedger
+    server: StackQLServer, instructions: str, window_seconds: int, ledger: RunLedger
 ) -> ReconReport:
-    traffic_sql = render_query("edge/zone_traffic", since=since, until=until)
-    ruleset_sql = render_query("edge/rate_limit_ruleset")
+    """The intent is in the instructions (rendered from edge/prompts/recon.md); the input only
+    tells the agent to start."""
     agent = make_agent(
         "sweep",
         name="edge-recon",
-        instructions=RECON_INSTRUCTIONS,
+        instructions=instructions,
         mcp_servers=[server],
         output_type=ReconReport,
     )
-    prompt = (
-        f"window_seconds: {window_seconds} (since {since}, until {until})\n\n"
-        f"Statement 1 (edge/zone_traffic):\n{traffic_sql}\n\n"
-        f"Statement 2 (edge/rate_limit_ruleset):\n{ruleset_sql}\n"
-    )
-    result = await Runner.run(agent, prompt, max_turns=6)
+    result = await Runner.run(agent, "Begin the recon now.", max_turns=RECON_MAX_TURNS)
     ledger.record("recon", tier("sweep").model, result)
     report = result.final_output_as(ReconReport)
     return cross_check(report, list(result.new_items), window_seconds)

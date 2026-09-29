@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 
 #[derive(Debug, Clone)]
 pub struct Settings {
-    /// The `sre/` directory (queries live under it).
+    /// The `sre/` directory (`prompts/` and `queries/` live under it).
     pub sre_dir: PathBuf,
     /// The repository root (`.env`, `pricing.json`, `runs/` live there).
     pub repo_root: PathBuf,
@@ -136,6 +136,11 @@ impl Settings {
 
     pub fn queries_dir(&self) -> PathBuf {
         self.sre_dir.join("queries")
+    }
+
+    /// The intent prompts, read at run time so they can be edited without a rebuild.
+    pub fn prompts_dir(&self) -> PathBuf {
+        self.sre_dir.join("prompts")
     }
 
     pub fn runs_dir(&self) -> PathBuf {

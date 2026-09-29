@@ -1,19 +1,21 @@
-"""Query library loader. All SQL lives in finops/queries/ - one file per query with a header:
+"""Loader for the SQL files under finops/queries/. The models do not receive these: they
+discover resources through the StackQL library and describe tools. What remains on disk is
 
-    -- id: finops/aws_unattached_volumes
+    queries/examples/*.sql   two or three illustrative SELECTs, the shape of a finops query
+                             (the `validate` subcommand checks them with validate_select_query)
+
+Each file has a header:
+
+    -- id: finops/examples/aws_unattached_volumes
     -- providers: aws
     -- params: aws_region
     -- expected_columns: volume_id, size_gb, ...
     -- description: one line
     <SQL with {{ param }} placeholders>
 
-Mutation templates under finops/queries/remediation/ carry `-- kind: mutation`. They are never
-executed by this program: the models copy them into proposed_remediation for human review.
-
 Placeholders are substituted from environment variables (lower-cased param -> the matching
 upper-case env var, e.g. aws_region -> AWS_REGION) plus explicit overrides passed by code.
-Missing values fail fast naming the variable. Agent code loads queries by id; there are no
-inline SQL strings in agent code.
+Missing values fail fast naming the variable.
 """
 
 from __future__ import annotations
@@ -37,7 +39,6 @@ class QueryError(ValueError):
 class Query:
     id: str
     path: Path
-    kind: str  # select | mutation
     providers: list[str]
     params: list[str]
     expected_columns: list[str]
@@ -63,22 +64,12 @@ class Query:
         if missing:
             names = ", ".join(f"{p} (env {p.upper()})" for p in missing)
             raise QueryError(f"query {self.id}: missing parameter(s) {names}")
-        return self._substitute(values, strict=True)
 
-    def render_partial(self, **overrides: str) -> str:
-        """Substitute what is available and leave the rest as <name> markers. Used for the
-        mutation templates handed to the models, which fill resource identifiers themselves."""
-        values = {k: v for k, v in self.values(overrides).items() if v != ""}
-        return self._substitute(values, strict=False)
-
-    def _substitute(self, values: dict[str, str], *, strict: bool) -> str:
         def sub(m: re.Match) -> str:
             key = m.group(1)
-            if key in values:
-                return values[key]
-            if strict:
+            if key not in values:
                 raise QueryError(f"query {self.id}: unknown placeholder {{{{ {key} }}}}")
-            return f"<{key}>"
+            return values[key]
 
         return _PARAM_RE.sub(sub, self.sql).strip()
 
@@ -113,7 +104,6 @@ def parse_query(path: Path, base: Path = QUERIES_DIR) -> Query:
     return Query(
         id=meta.get("id", f"finops/{rel}"),
         path=path,
-        kind=meta.get("kind", "select"),
         providers=_split(meta, "providers"),
         params=declared or used,
         expected_columns=_split(meta, "expected_columns"),
@@ -123,13 +113,8 @@ def parse_query(path: Path, base: Path = QUERIES_DIR) -> Query:
     )
 
 
-def list_queries(kind: str | None = None, base: Path = QUERIES_DIR) -> list[Query]:
-    out = []
-    for p in sorted(base.rglob("*.sql")):
-        q = parse_query(p, base)
-        if kind is None or q.kind == kind:
-            out.append(q)
-    return out
+def list_queries(base: Path = QUERIES_DIR) -> list[Query]:
+    return [parse_query(p, base) for p in sorted(base.rglob("*.sql"))]
 
 
 def load_query(query_id: str, base: Path = QUERIES_DIR) -> Query:

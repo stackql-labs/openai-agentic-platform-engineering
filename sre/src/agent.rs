@@ -1,9 +1,8 @@
 //! The model steps, on the OpenAI Responses API (`async-openai`): a function-calling loop whose
 //! tools are bridged from the read-only embedded server (filtered to SELECT and discovery), and
-//! structured outputs via a `json_schema` text format. The model gets rendered SQL from the query
-//! library and runs it verbatim; it proposes, it never executes.
-
-use std::collections::BTreeMap;
+//! structured outputs via a `json_schema` text format. The model gets an intent prompt and
+//! discovers resources, columns and mutation contracts through the StackQL tools; it proposes a
+//! statement, it never executes one.
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_openai::config::OpenAIConfig;
@@ -238,11 +237,16 @@ pub struct Diagnosis {
 pub struct Proposal {
     pub action: String,
     pub target: String,
+    /// `provider.service.resource` the statement addresses, as the model discovered it.
+    pub resource: String,
     pub new_replicas: i64,
-    pub rationale: String,
-    pub blast_radius: String,
+    /// The exact single mutation statement (empty for no_action). Checked by the gate allowlist.
+    pub statement: String,
+    /// The SELECT that verifies the outcome (empty for no_action). Validated before use.
+    pub verification_select: String,
     pub rollback_statement: String,
-    pub expected_verification: String,
+    pub blast_radius: String,
+    pub rationale: String,
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize)]
@@ -293,13 +297,15 @@ pub fn proposal_schema() -> OutputSchema {
             json!({
                 "action": {"type": "string", "enum": ["scale_out_by_one", "no_action"]},
                 "target": {"type": "string", "description": "namespace/deployment the mutation touches"},
-                "new_replicas": {"type": "integer", "description": "The replica count after the action (current when no_action)"},
-                "rationale": {"type": "string"},
+                "resource": {"type": "string", "description": "provider.service.resource the statement addresses, as discovered with list_methods / describe_method (empty for no_action)"},
+                "new_replicas": {"type": "integer", "description": "The replica count after the action (the current desired count when no_action)"},
+                "statement": {"type": "string", "description": "The exact single StackQL mutation statement to be approved and executed by code (empty for no_action)"},
+                "verification_select": {"type": "string", "description": "A flat SELECT returning spec_replicas and ready_replicas for the target, validated with validate_select_query (empty for no_action)"},
+                "rollback_statement": {"type": "string", "description": "The same mutation with the previous replica count (empty for no_action)"},
                 "blast_radius": {"type": "string", "description": "What else changes, and what does not"},
-                "rollback_statement": {"type": "string", "description": "The StackQL statement that reverses it - same UPDATE with the previous replica count"},
-                "expected_verification": {"type": "string", "description": "What the post-mutation SELECT must show for the loop to close"}
+                "rationale": {"type": "string"}
             }),
-            &["action", "target", "new_replicas", "rationale", "blast_radius", "rollback_statement", "expected_verification"],
+            &["action", "target", "resource", "new_replicas", "statement", "verification_select", "rollback_statement", "blast_radius", "rationale"],
         ),
     }
 }
@@ -309,7 +315,7 @@ pub fn closeout_schema() -> OutputSchema {
         name: "closeout",
         schema: obj(
             json!({
-                "outcome": {"type": "string", "enum": ["recovered", "not_recovered", "declined", "no_action"]},
+                "outcome": {"type": "string", "enum": ["recovered", "not_recovered", "declined", "rejected", "no_action"]},
                 "summary": {"type": "string", "description": "One paragraph incident note for the on-call handover"}
             }),
             &["outcome", "summary"],
@@ -319,15 +325,6 @@ pub fn closeout_schema() -> OutputSchema {
 
 pub fn parse_output<T: for<'de> Deserialize<'de>>(label: &str, text: &str) -> Result<T> {
     serde_json::from_str(text).with_context(|| format!("{label}: structured output did not match the schema: {text}"))
-}
-
-/// The diagnosis query pack: rendered SQL the model runs verbatim through `run_select_query`.
-pub fn query_pack(rendered: &BTreeMap<String, String>) -> String {
-    rendered
-        .iter()
-        .map(|(id, sql)| format!("-- {id}\n{sql}"))
-        .collect::<Vec<_>>()
-        .join("\n\n")
 }
 
 #[cfg(test)]
@@ -350,7 +347,7 @@ mod tests {
     fn structured_outputs_parse() {
         let p: Proposal = parse_output(
             "propose",
-            r#"{"action":"scale_out_by_one","target":"agentic-demo/agentic-demo-checkout","new_replicas":2,"rationale":"r","blast_radius":"b","rollback_statement":"UPDATE ...","expected_verification":"v"}"#,
+            r#"{"action":"scale_out_by_one","target":"agentic-demo/agentic-demo-checkout","resource":"k8s.apps.deployments_scale","new_replicas":2,"statement":"UPDATE ...","verification_select":"SELECT ...","rollback_statement":"UPDATE ...","blast_radius":"b","rationale":"r"}"#,
         )
         .unwrap();
         assert_eq!(p.new_replicas, 2);
@@ -362,14 +359,5 @@ mod tests {
         assert_eq!(effort("low"), ReasoningEffort::Low);
         assert_eq!(effort("HIGH"), ReasoningEffort::High);
         assert_eq!(effort("unknown"), ReasoningEffort::Medium);
-    }
-
-    #[test]
-    fn query_pack_labels_each_statement() {
-        let mut m = BTreeMap::new();
-        m.insert("sre/a".to_string(), "SELECT 1".to_string());
-        m.insert("sre/b".to_string(), "SELECT 2".to_string());
-        let pack = query_pack(&m);
-        assert!(pack.starts_with("-- sre/a\nSELECT 1\n\n-- sre/b\nSELECT 2"));
     }
 }

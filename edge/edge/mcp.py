@@ -142,6 +142,27 @@ def read_only_server(name: str = "stackql-ro") -> StackQLServer:
     return stackql_server(name=name, mode="read_only")
 
 
+async def read_server_instructions(server: StackQLServer, uri: str) -> str | None:
+    """Read an MCP resource the server publishes (its own guidance lives at
+    stackql://docs/instructions). Returns None, and says so on the console, when it cannot be read,
+    so a run continues with the local briefing alone."""
+    try:
+        result = await server.read_resource(uri)
+    except Exception as e:  # noqa: BLE001 - any transport or protocol failure is non-fatal here
+        console.print(
+            f"[yellow]could not read {uri}: {escape(str(e)[:200])} - continuing without it[/yellow]"
+        )
+        return None
+    text = "\n".join(
+        getattr(c, "text", "") or "" for c in (getattr(result, "contents", None) or [])
+    ).strip()
+    if not text:
+        console.print(f"[yellow]{uri} returned no text - continuing without it[/yellow]")
+        return None
+    console.print(f"read {uri}: {len(text)} chars appended to the discovery briefing")
+    return text
+
+
 # --- result helpers ----------------------------------------------------------------------------
 
 
