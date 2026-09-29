@@ -1,5 +1,5 @@
 {
-  "name": "oape-drift",
+  "name": "drift",
   "version": "0.1.0",
   "private": true,
   "description": "Drift detection: hourly snapshots of AWS and Azure network control-plane state via the StackQL MCP server, SQL deltas over node:sqlite, and a model brief on the deltas only",

@@ -36,7 +36,6 @@ impl Query {
     pub fn is_mutation(&self) -> bool {
         let head = self
             .sql
-            .trim_start()
             .split_whitespace()
             .next()
             .unwrap_or("")

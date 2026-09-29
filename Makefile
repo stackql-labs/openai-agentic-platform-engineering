@@ -26,7 +26,8 @@ setup-sre: ## rust: cargo build, pull k8s
 	cd sre && cargo build --release && ./target/release/sre setup
 
 setup-drift: ## javascript: npm install, pull aws/azure
-	cd drift && npm install && node src/cli.js setup
+	cd drift && npm install
+	node drift/src/cli.js setup
 
 setup-edge: ## python: uv sync, pull cloudflare/github
 	cd edge && uv sync && uv run python -m edge setup
@@ -77,14 +78,14 @@ finops: ## FinOps sweep: idle resources across aws/azure/google -> cost report
 entitlements: ## entitlements audit: privileged principals + IdP joins -> recertification report
 	cd entitlements && npm run sweep
 
-sre-alert: ## fire the synthetic incident (event trigger)
+sre-alert: ## fire the synthetic incident (event trigger, writes runs/alert.json)
 	cd sre && ./target/release/sre alert
 
 sre: ## agentic SRE: diagnose -> propose -> approval gate -> one mutation -> verify
 	cd sre && ./target/release/sre run
 
 drift: ## drift briefing: snapshot -> SQL delta -> brief on deltas only
-	cd drift && node src/cli.js run
+	node drift/src/cli.js run
 
 edge: ## edge autopilot: recon -> decision -> approval gate -> rate limit REPLACE -> decision record
 	cd edge && uv run python -m edge run
@@ -92,7 +93,7 @@ edge: ## edge autopilot: recon -> decision -> approval gate -> rate limit REPLAC
 # --- checks -----------------------------------------------------------------------------------
 test: ## every use case's offline tests, lint and typecheck
 	cd finops && uv run ruff check . && uv run pytest -q
-	cd entitlements && npx tsc --noEmit && npm test
+	cd entitlements && npm run typecheck && npm test
 	cd sre && cargo test --quiet
 	cd drift && npm test
 	cd edge && uv run ruff check . && uv run pytest -q

@@ -1,0 +1,61 @@
+# Entitlements demo estate - AWS (stackql-deploy stack)
+#
+# Plants one finding for the entitlements sweep: an IAM user named <DEMO_PREFIX>-admin with the
+# AWS managed policy AdministratorAccess attached and no access key or login profile (the grant
+# exists; nobody can use it). Tagged with DEMO_TAG_KEY=DEMO_TAG_VALUE so teardown can be filtered.
+#
+# Operator identity: needs iam:CreateUser, iam:TagUser, iam:AttachUserPolicy, iam:DetachUserPolicy,
+# iam:DeleteUser, iam:GetUser, iam:ListUsers, iam:ListAttachedUserPolicies (IAM is global; the
+# provider signs against us-east-1).
+#
+# Column names verified with `SHOW INSERT INTO aws.iam.users` and `SHOW METHODS IN
+# aws.iam.user_policies` on provider aws v26.08.00444; the stack has not been executed live in
+# this build (no cloud credentials in the build environment).
+#
+# Build:    stackql-deploy build entitlements/stack/aws dev --env-file .env
+# Test:     stackql-deploy test  entitlements/stack/aws dev --env-file .env
+# Teardown: stackql-deploy teardown entitlements/stack/aws dev --env-file .env
+version: 1
+name: entitlements-aws
+description: entitlements demo estate on AWS - one IAM user with AdministratorAccess attached
+providers:
+  - aws
+globals:
+  - name: region
+    description: IAM is global; the provider signs against us-east-1
+    value: us-east-1
+  - name: demo_prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: global_tags
+    value:
+      - Key: "{{ DEMO_TAG_KEY }}"
+        Value: "{{ DEMO_TAG_VALUE }}"
+      - Key: managed-by
+        Value: stackql-deploy
+      - Key: stackName
+        Value: "{{ stack_name }}"
+      - Key: stackEnv
+        Value: "{{ stack_env }}"
+resources:
+  - name: admin_user
+    description: planted - IAM user that will hold AdministratorAccess (no access key, no console password)
+    props:
+      - name: user_name
+        value: "{{ demo_prefix }}-admin"
+      - name: user_tags
+        value:
+          - Key: Name
+            Value: "{{ demo_prefix }}-admin"
+        merge:
+          - global_tags
+    exports:
+      - admin_user_name
+      - admin_user_arn
+
+  - name: admin_user_policy
+    description: planted - AdministratorAccess attached to the user (the entitlements finding)
+    props:
+      - name: user_name
+        value: "{{ admin_user_name }}"
+      - name: policy_arn
+        value: arn:aws:iam::aws:policy/AdministratorAccess

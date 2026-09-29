@@ -125,7 +125,7 @@ export class StackqlServer {
       const text = String(chunk);
       if (/error|fatal|panic|failed/i.test(text)) process.stderr.write(`[${this.name}] ${text}`);
     });
-    this.client = new Client({ name: `oape-drift-${this.name}`, version: '0.1.0' });
+    this.client = new Client({ name: `drift-${this.name}`, version: '0.1.0' });
     await this.client.connect(this.transport);
     return this;
   }

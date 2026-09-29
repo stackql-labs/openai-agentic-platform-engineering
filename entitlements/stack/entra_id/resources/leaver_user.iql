@@ -1,0 +1,38 @@
+/*+ exists */
+WITH u AS (
+  SELECT id, userPrincipalName AS upn FROM entra_id.users.users
+)
+SELECT COUNT(*) AS count FROM u WHERE upn = '{{ leaver_upn }}'
+
+/*+ create */
+INSERT INTO entra_id.users.users (
+  accountEnabled,
+  displayName,
+  mailNickname,
+  userPrincipalName,
+  department,
+  passwordProfile
+)
+SELECT
+  false,
+  '{{ leaver_display_name }}',
+  '{{ leaver_nick }}',
+  '{{ leaver_upn }}',
+  '{{ demo_tag }}',
+  '{"forceChangePasswordNextSignIn": true, "password": "{{ leaver_initial_password }}"}'
+
+/*+ statecheck, retries=5, retry_delay=5 */
+WITH u AS (
+  SELECT id, userPrincipalName AS upn, accountEnabled AS enabled FROM entra_id.users.users
+)
+SELECT COUNT(*) AS count FROM u WHERE upn = '{{ leaver_upn }}' AND enabled IN ('false', '0', 0)
+
+/*+ exports */
+WITH u AS (
+  SELECT id, userPrincipalName AS upn FROM entra_id.users.users
+)
+SELECT id AS leaver_object_id FROM u WHERE upn = '{{ leaver_upn }}'
+
+/*+ delete */
+DELETE FROM entra_id.users.users
+WHERE user_principal_name = '{{ leaver_upn }}'

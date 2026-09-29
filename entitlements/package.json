@@ -1,0 +1,28 @@
+{
+  "name": "entitlements",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Entitlements audit: scheduled read-only recertification sweep over AWS, Azure, GCP, GitHub and the IdP (Entra ID or Okta) through the StackQL MCP server, driven by the OpenAI Agents SDK",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "tsx src/main.ts setup",
+    "sweep": "tsx src/main.ts sweep",
+    "validate": "tsx src/main.ts validate",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@openai/agents": "^0.18.0",
+    "@stackql/mcp-server": "^0.12.718",
+    "dotenv": "^18.0.4",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
