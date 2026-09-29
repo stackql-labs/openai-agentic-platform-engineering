@@ -3,22 +3,27 @@
 //!   - constructs a StackQL MCP server in `full_access` mode
 //!   - calls `run_mutation_query`
 //!
-//! and it never hands either to a model. The approved statement is rendered from the query
-//! library (`sre/scale_deployment`) and executed by code, so the mutation is one logged SQL
-//! statement, exactly like every SELECT before it.
+//! and it never hands either to a model. The model discovers the scale mutation's IO contract
+//! itself (`list_methods` / `describe_method`) and proposes the exact statement in its structured
+//! output; this module decides whether that statement may run, and code runs it.
 //!
 //! Sequence, all of which must succeed in order:
 //!
-//!   1. `prepare` renders the statement and mints a nonce for this proposal.
+//!   1. `prepare_proposed` checks the proposed statement against the allowlist (`check_statement`:
+//!      one statement, verb UPDATE or REPLACE, resource `k8s.apps.deployments_scale` or
+//!      `k8s.apps.deployments`, WHERE pinned to K8S_NAMESPACE, the target name, cluster_addr and
+//!      protocol, no OR, no other verb, the replica count it carries equal to the proposed one) and
+//!      mints a nonce. `prepare_reset` renders the code-owned `sre/reset_scale` for `--reset` and
+//!      runs it through the same check.
 //!   2. An `Approval` is produced only by the terminal prompt (exact phrase `approve <id>`) or
 //!      the explicit `--approve` flag, and carries that nonce.
 //!   3. `execute_approved` re-checks the nonce, starts the executor server, asserts the target
-//!      with a SELECT (`sre/assert_demo_target`) on that server - it must exist in K8S_NAMESPACE,
-//!      carry the DEMO_PREFIX name (or be the configured target) and the demo label - then sends
-//!      exactly one `run_mutation_query`.
+//!      with the code-owned SELECT (`sre/assert_demo_target`) on that server - it must exist in
+//!      K8S_NAMESPACE, carry the DEMO_PREFIX name (or be the configured target) and the demo label -
+//!      then sends exactly one `run_mutation_query`.
 //!
-//! The tests below prove the gate refuses without a matching approval and that `Mode::FullAccess`
-//! appears nowhere else in the source tree.
+//! The tests below prove the gate refuses without a matching approval, that the allowlist rejects
+//! anything but the one permitted shape, and that `Mode::FullAccess` appears nowhere else.
 
 use std::io::{self, BufRead, Write};
 
@@ -32,36 +37,59 @@ use crate::cost::{short_id, StepUsage};
 use crate::mcp::{self, Server};
 use crate::queries::load_query;
 
-pub const MUTATION_QUERY_ID: &str = "sre/scale_deployment";
+pub const RESET_QUERY_ID: &str = "sre/reset_scale";
 pub const ASSERT_QUERY_ID: &str = "sre/assert_demo_target";
 
-/// The fixed menu. Anything else cannot be prepared.
+/// The allowlist: (verb, provider.service.resource) pairs a proposed statement may use.
+pub const ALLOWED_VERBS: &[&str] = &["UPDATE", "REPLACE"];
+pub const ALLOWED_RESOURCES: &[&str] = &["k8s.apps.deployments_scale", "k8s.apps.deployments"];
+
+/// Any of these as a token outside a string literal, other than the leading verb, rejects the
+/// statement: it is either a second statement, a subquery, or a widening of the WHERE clause.
+const FORBIDDEN_TOKENS: &[&str] = &[
+    "SELECT", "INSERT", "UPDATE", "DELETE", "REPLACE", "EXEC", "DROP", "CREATE", "ALTER", "UNION", "WITH", "OR",
+];
+
+/// Where a pending statement came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action {
-    /// Raise the replica count by exactly one (the remediation the model may propose).
-    ScaleOutByOne,
-    /// Put the deployment back to one replica (`sre run --reset`, operator-initiated).
-    ResetToOne,
+pub enum Source {
+    /// Discovered and written by the model, checked by `check_statement`.
+    ModelProposed,
+    /// Rendered from `sre/queries/reset_scale.sql` for `sre run --reset` (no model involved).
+    CodeOwned,
 }
 
-impl Action {
+impl Source {
     pub fn as_str(self) -> &'static str {
         match self {
-            Action::ScaleOutByOne => "scale_out_by_one",
-            Action::ResetToOne => "reset_to_one",
+            Source::ModelProposed => "model-proposed",
+            Source::CodeOwned => "code-owned",
         }
     }
+}
+
+/// What `check_statement` established about a statement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatementCheck {
+    pub verb: String,
+    pub resource: String,
+    pub replicas: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PendingMutation {
     pub proposal_id: String,
     pub action: String,
-    pub query_id: String,
+    pub source: String,
+    pub verb: String,
+    pub resource: String,
     pub target: String,
     pub namespace: String,
     pub replicas: i64,
     pub sql: String,
+    /// The model-proposed verification SELECT once it passed `validate_select_query`; None means
+    /// the poll uses the code-owned `sre/verify_replicas`.
+    pub verification_sql: Option<String>,
     #[serde(skip)]
     pub nonce: String,
 }
@@ -78,32 +106,195 @@ pub struct Approval {
 #[derive(Debug, Clone, Serialize)]
 pub struct Execution {
     pub proposal_id: String,
-    pub query_id: String,
+    pub source: String,
+    pub resource: String,
     pub sql: String,
     pub approved_by: String,
     pub method: String,
     pub server_response: String,
 }
 
-/// Render the one statement this action maps to.
-pub fn prepare(settings: &Settings, action: Action, replicas: i64, proposal_id: &str) -> Result<PendingMutation> {
+/// One lexical item of a statement. String literals keep their content (with `''` unescaped) so
+/// a predicate value is compared as a whole and text inside a literal never counts as syntax.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Tok {
+    Word(String),
+    Lit(String),
+    Sym(char),
+}
+
+/// Lex a statement into words (identifiers, keywords, numbers, dotted names), single-quoted
+/// literals and single-character symbols. Comments and unterminated literals are errors.
+fn lex(sql: &str) -> Result<Vec<Tok>> {
+    let chars: Vec<char> = sql.chars().collect();
+    let mut toks = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c.is_whitespace() {
+            i += 1;
+        } else if c == '\'' {
+            let mut lit = String::new();
+            i += 1;
+            loop {
+                match chars.get(i) {
+                    None => bail!("statement check: unterminated string literal"),
+                    Some('\'') if chars.get(i + 1) == Some(&'\'') => {
+                        lit.push('\'');
+                        i += 2;
+                    }
+                    Some('\'') => {
+                        i += 1;
+                        break;
+                    }
+                    Some(ch) => {
+                        lit.push(*ch);
+                        i += 1;
+                    }
+                }
+            }
+            toks.push(Tok::Lit(lit));
+        } else if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+            let start = i;
+            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_' || chars[i] == '.') {
+                i += 1;
+            }
+            toks.push(Tok::Word(chars[start..i].iter().collect()));
+        } else if (c == '-' && chars.get(i + 1) == Some(&'-')) || (c == '/' && chars.get(i + 1) == Some(&'*')) {
+            bail!("statement check: comments are not accepted in a statement");
+        } else {
+            toks.push(Tok::Sym(c));
+            i += 1;
+        }
+    }
+    Ok(toks)
+}
+
+/// `key = 'value'` present as a whole predicate: a literal token equal to `value` preceded by `=`
+/// and the key word (case-insensitive).
+fn pins(toks: &[Tok], key: &str, value: &str) -> bool {
+    toks.windows(3).any(|w| match (&w[0], &w[1], &w[2]) {
+        (Tok::Word(k), Tok::Sym('='), Tok::Lit(v)) => k.eq_ignore_ascii_case(key) && v == value,
+        _ => false,
+    })
+}
+
+/// The replica count the statement carries (`"replicas": N` inside a literal).
+fn replicas_in(toks: &[Tok]) -> Option<i64> {
+    toks.iter().find_map(|t| match t {
+        Tok::Lit(l) => {
+            let idx = l.find("\"replicas\"")?;
+            let rest = l[idx + "\"replicas\"".len()..].trim_start();
+            let rest = rest.strip_prefix(':')?.trim_start();
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse().ok()
+        }
+        _ => None,
+    })
+}
+
+/// The allowlist check. Accepts exactly one UPDATE or REPLACE against an allowed k8s deployment
+/// resource whose WHERE clause pins the demo namespace, the target name, the cluster address and
+/// the protocol from settings, and whose body sets `replicas` to `expected_replicas`.
+pub fn check_statement(settings: &Settings, sql: &str, target: &str, expected_replicas: i64) -> Result<StatementCheck> {
+    let trimmed = sql.trim();
+    if trimmed.is_empty() {
+        bail!("statement check: empty statement");
+    }
+    let body = trimmed.trim_end_matches(';').trim_end();
+    let toks = lex(body)?;
+    if toks.contains(&Tok::Sym(';')) {
+        bail!("statement check: more than one statement (a `;` inside the text)");
+    }
+    let words: Vec<&str> = toks
+        .iter()
+        .filter_map(|t| match t {
+            Tok::Word(w) => Some(w.as_str()),
+            _ => None,
+        })
+        .collect();
+    let verb = words.first().map(|t| t.to_ascii_uppercase()).unwrap_or_default();
+    if !ALLOWED_VERBS.contains(&verb.as_str()) {
+        bail!("statement check: verb {verb:?} is not on the allowlist {ALLOWED_VERBS:?}");
+    }
+    let resource = words.get(1).map(|t| t.to_ascii_lowercase()).unwrap_or_default();
+    if !ALLOWED_RESOURCES.contains(&resource.as_str()) {
+        bail!("statement check: resource {resource:?} is not on the allowlist {ALLOWED_RESOURCES:?}");
+    }
+    for w in words.iter().skip(1) {
+        let u = w.to_ascii_uppercase();
+        if FORBIDDEN_TOKENS.contains(&u.as_str()) {
+            bail!("statement check: {u} is not accepted inside the statement");
+        }
+    }
+    if !words.iter().any(|w| w.eq_ignore_ascii_case("WHERE")) {
+        bail!("statement check: no WHERE clause");
+    }
+    for (key, value) in [
+        ("namespace", settings.k8s_namespace.as_str()),
+        ("name", target),
+        ("cluster_addr", settings.kube_cluster_addr.as_str()),
+        ("protocol", settings.kube_protocol.as_str()),
+    ] {
+        if !pins(&toks, key, value) {
+            bail!("statement check: WHERE does not pin {key} = '{value}'");
+        }
+    }
+    let replicas = replicas_in(&toks).ok_or_else(|| anyhow!("statement check: no \"replicas\": N in the statement body"))?;
+    if replicas != expected_replicas {
+        bail!("statement check: statement sets replicas to {replicas}, proposal says {expected_replicas}");
+    }
     if replicas < 1 {
-        bail!("refusing to prepare a scale to {replicas} replicas");
+        bail!("statement check: refusing a scale to {replicas} replicas");
     }
-    let q = load_query(&settings.queries_dir(), MUTATION_QUERY_ID)?;
-    if !q.is_mutation() {
-        bail!("{MUTATION_QUERY_ID} is not a mutation template");
-    }
-    let replicas_s = replicas.to_string();
-    let sql = q.render(&settings.render_context(), &[("replicas", replicas_s.as_str())])?;
+    Ok(StatementCheck { verb, resource, replicas })
+}
+
+/// The model-proposed statement, after the allowlist check, with a fresh nonce.
+pub fn prepare_proposed(
+    settings: &Settings,
+    proposal_id: &str,
+    statement: &str,
+    replicas: i64,
+    verification_sql: Option<String>,
+) -> Result<PendingMutation> {
+    let target = settings.target_deployment.clone();
+    let check = check_statement(settings, statement, &target, replicas)?;
     Ok(PendingMutation {
         proposal_id: proposal_id.to_string(),
-        action: action.as_str().to_string(),
-        query_id: q.id.clone(),
+        action: "scale_out_by_one".into(),
+        source: Source::ModelProposed.as_str().into(),
+        verb: check.verb,
+        resource: check.resource,
+        target,
+        namespace: settings.k8s_namespace.clone(),
+        replicas: check.replicas,
+        sql: statement.trim().trim_end_matches(';').trim().to_string(),
+        verification_sql,
+        nonce: short_id(16),
+    })
+}
+
+/// The code-owned reset (`sre run --reset`): render `sre/reset_scale` to one replica and run it
+/// through the same allowlist check.
+pub fn prepare_reset(settings: &Settings, proposal_id: &str) -> Result<PendingMutation> {
+    let q = load_query(&settings.queries_dir(), RESET_QUERY_ID)?;
+    if !q.is_mutation() {
+        bail!("{RESET_QUERY_ID} is not a mutation template");
+    }
+    let sql = q.render(&settings.render_context(), &[("replicas", "1")])?;
+    let check = check_statement(settings, &sql, &settings.target_deployment, 1)?;
+    Ok(PendingMutation {
+        proposal_id: proposal_id.to_string(),
+        action: "reset_to_one".into(),
+        source: Source::CodeOwned.as_str().into(),
+        verb: check.verb,
+        resource: check.resource,
         target: settings.target_deployment.clone(),
         namespace: settings.k8s_namespace.clone(),
-        replicas,
+        replicas: 1,
         sql,
+        verification_sql: None,
         nonce: short_id(16),
     })
 }
@@ -111,9 +302,16 @@ pub fn prepare(settings: &Settings, action: Action, replicas: i64, proposal_id: 
 pub fn print_gate(pending: &PendingMutation) {
     println!();
     println!("=== approval gate ===");
-    println!("proposal {}: {} -> {}/{} to {} replicas", pending.proposal_id, pending.action, pending.namespace, pending.target, pending.replicas);
-    println!("statement (sre/queries/{}.sql):", pending.query_id.trim_start_matches("sre/"));
+    println!(
+        "proposal {}: {} -> {}/{} to {} replicas ({} {}, {})",
+        pending.proposal_id, pending.action, pending.namespace, pending.target, pending.replicas, pending.verb, pending.resource, pending.source
+    );
+    println!("statement (allowlist check passed):");
     println!("{}", pending.sql);
+    match &pending.verification_sql {
+        Some(v) => println!("verification (model-proposed, validated):\n{v}"),
+        None => println!("verification: code-owned sre/verify_replicas"),
+    }
 }
 
 /// The explicit human step. Returns an Approval only when the operator types the exact phrase.
@@ -218,10 +416,12 @@ async fn start_executor(settings: &Settings) -> Result<Server> {
     Ok(Server::wrap(inner, Mode::FullAccess, settings))
 }
 
-/// Execute exactly one approved statement, after the nonce check and the target assertion.
+/// Execute exactly one approved statement, after the nonce check, a repeat of the allowlist check
+/// and the target assertion.
 pub async fn execute_approved(settings: &Settings, pending: &PendingMutation, approval: Option<&Approval>) -> Result<Execution> {
     check_approval(pending, approval)?;
     let approval = approval.expect("checked above");
+    check_statement(settings, &pending.sql, &pending.target, pending.replicas)?;
 
     let assert_sql = load_query(&settings.queries_dir(), ASSERT_QUERY_ID)?
         .render(&settings.render_context(), &[])?;
@@ -252,7 +452,8 @@ pub async fn execute_approved(settings: &Settings, pending: &PendingMutation, ap
     println!("executed via run_mutation_query: {}", server_response.chars().take(200).collect::<String>());
     Ok(Execution {
         proposal_id: pending.proposal_id.clone(),
-        query_id: pending.query_id.clone(),
+        source: pending.source.clone(),
+        resource: pending.resource.clone(),
         sql: pending.sql.clone(),
         approved_by: approval.approver.clone(),
         method: approval.method.clone(),
@@ -290,22 +491,95 @@ mod tests {
         }
     }
 
+    const GOOD: &str = "UPDATE k8s.apps.deployments_scale SET spec = '{\"replicas\": 2}' WHERE name = 'agentic-demo-checkout' AND namespace = 'agentic-demo' AND cluster_addr = 'localhost:8001' AND protocol = 'http'";
+
+    fn good(replicas: i64) -> String {
+        GOOD.replace("\"replicas\": 2", &format!("\"replicas\": {replicas}"))
+    }
+
     #[test]
-    fn prepare_renders_the_scale_statement() {
-        let p = prepare(&settings(), Action::ScaleOutByOne, 2, "prop-1").unwrap();
-        assert!(p.sql.starts_with("UPDATE k8s.apps.deployments_scale"));
-        assert!(p.sql.contains("'{\"replicas\": 2}'"), "{}", p.sql);
-        assert!(p.sql.contains("name = 'agentic-demo-checkout'"));
-        assert!(p.sql.contains("namespace = 'agentic-demo'"));
-        assert!(p.sql.contains("cluster_addr = 'localhost:8001'"));
-        assert!(p.sql.contains("protocol = 'http'"));
+    fn allowlist_accepts_the_permitted_shapes() {
+        let s = settings();
+        let c = check_statement(&s, GOOD, "agentic-demo-checkout", 2).unwrap();
+        assert_eq!(c, StatementCheck { verb: "UPDATE".into(), resource: "k8s.apps.deployments_scale".into(), replicas: 2 });
+        // trailing semicolon, mixed case, tight spacing and multi-line layout are fine
+        let variant = "update K8S.APPS.DEPLOYMENTS_SCALE\n  set spec='{\"replicas\":2}'\n  where name='agentic-demo-checkout'\n    and namespace='agentic-demo' and cluster_addr='localhost:8001' and protocol='http';";
+        assert!(check_statement(&s, variant, "agentic-demo-checkout", 2).is_ok());
+        // REPLACE on the deployment resource itself
+        let replace = "REPLACE k8s.apps.deployments SET spec = '{\"replicas\": 2, \"selector\": {\"matchLabels\": {\"app\": \"checkout\"}}}' WHERE name = 'agentic-demo-checkout' AND namespace = 'agentic-demo' AND cluster_addr = 'localhost:8001' AND protocol = 'http'";
+        let c = check_statement(&s, replace, "agentic-demo-checkout", 2).unwrap();
+        assert_eq!((c.verb.as_str(), c.resource.as_str()), ("REPLACE", "k8s.apps.deployments"));
+    }
+
+    #[test]
+    fn allowlist_rejects_everything_else() {
+        let s = settings();
+        let t = "agentic-demo-checkout";
+        let rejects = |sql: &str, why: &str| {
+            let err = check_statement(&s, sql, t, 2).map(|_| ()).unwrap_err().to_string();
+            assert!(err.contains(why), "{sql}\n  expected {why:?} in {err}");
+        };
+        rejects("", "empty");
+        rejects(&GOOD.replace("UPDATE k8s.apps.deployments_scale", "SELECT * FROM k8s.apps.deployments_scale"), "verb");
+        rejects(&GOOD.replace("UPDATE", "DELETE FROM"), "verb");
+        rejects(&GOOD.replace("UPDATE", "INSERT INTO"), "verb");
+        rejects(&GOOD.replace("k8s.apps.deployments_scale", "k8s.core.pods"), "resource");
+        rejects(&GOOD.replace("k8s.apps.deployments_scale", "k8s.apps.replica_sets"), "resource");
+        rejects(&GOOD.replace("k8s.apps.deployments_scale", "aws.ec2.instances"), "resource");
+        rejects(&format!("{GOOD}; DELETE FROM k8s.apps.deployments WHERE name = 'x'"), "more than one statement");
+        rejects(&format!("{GOOD} OR namespace = 'kube-system'"), "OR");
+        rejects(&GOOD.replace("namespace = 'agentic-demo'", "namespace = 'kube-system'"), "pin namespace");
+        rejects(&GOOD.replace("name = 'agentic-demo-checkout'", "name = 'payments'"), "pin name");
+        rejects(&GOOD.replace(" AND namespace = 'agentic-demo'", ""), "pin namespace");
+        rejects(&GOOD.replace(" AND cluster_addr = 'localhost:8001'", ""), "pin cluster_addr");
+        rejects(&GOOD.replace(" AND protocol = 'http'", ""), "pin protocol");
+        rejects(&GOOD.replace("\"replicas\": 2", "\"replicas\": 3"), "proposal says");
+        rejects(&GOOD.replace("'{\"replicas\": 2}'", "'{}'"), "replicas");
+        rejects(&format!("{GOOD} -- comment"), "comments");
+        rejects("UPDATE k8s.apps.deployments_scale SET spec = '{\"replicas\": 2}'", "WHERE");
+        // the name predicate must be its own predicate, not a substring of another value
+        rejects(
+            &GOOD.replace("name = 'agentic-demo-checkout'", "name = 'other' AND label = 'name = ''agentic-demo-checkout'''"),
+            "pin name",
+        );
+    }
+
+    #[test]
+    fn extra_and_predicates_keep_the_pins() {
+        // an extra AND predicate narrows, never widens: still one pinned UPDATE
+        let s = settings();
+        let sql = GOOD.replace("WHERE", "WHERE 1 = 1 AND");
+        assert!(check_statement(&s, &sql, "agentic-demo-checkout", 2).is_ok());
+        // a literal containing a quote or a semicolon is data, not syntax
+        let sql = format!("{GOOD} AND note = 'it''s; fine'");
+        assert!(check_statement(&s, &sql, "agentic-demo-checkout", 2).is_ok());
+    }
+
+    #[test]
+    fn prepare_proposed_keeps_the_statement_and_mints_a_nonce() {
+        let s = settings();
+        let p = prepare_proposed(&s, "prop-1", &format!("  {GOOD};\n"), 2, Some("SELECT 1".into())).unwrap();
+        assert_eq!(p.sql, GOOD);
+        assert_eq!(p.source, "model-proposed");
+        assert_eq!(p.replicas, 2);
         assert_eq!(p.nonce.len(), 16);
-        assert!(prepare(&settings(), Action::ResetToOne, 0, "prop-2").is_err());
+        assert!(prepare_proposed(&s, "prop-2", &good(0), 0, None).is_err());
+        assert!(prepare_proposed(&s, "prop-3", "SELECT 1", 2, None).is_err());
+    }
+
+    #[test]
+    fn reset_is_code_owned_and_passes_the_same_check() {
+        let p = prepare_reset(&settings(), "reset-1").unwrap();
+        assert_eq!(p.source, "code-owned");
+        assert_eq!(p.replicas, 1);
+        assert!(p.sql.starts_with("UPDATE k8s.apps.deployments_scale"));
+        assert!(p.sql.contains("'{\"replicas\": 1}'"), "{}", p.sql);
+        assert!(p.verification_sql.is_none());
     }
 
     #[test]
     fn phrase_must_match_exactly() {
-        let p = prepare(&settings(), Action::ScaleOutByOne, 2, "prop-abc").unwrap();
+        let p = prepare_proposed(&settings(), "prop-abc", GOOD, 2, None).unwrap();
         assert!(check_phrase(&p, "approve prop-abc").is_some());
         assert!(check_phrase(&p, "  approve prop-abc \n").is_some());
         assert!(check_phrase(&p, "approve").is_none());
@@ -317,9 +591,9 @@ mod tests {
     #[test]
     fn gate_refuses_without_a_matching_approval() {
         let s = settings();
-        let p = prepare(&s, Action::ScaleOutByOne, 2, "prop-1").unwrap();
+        let p = prepare_proposed(&s, "prop-1", GOOD, 2, None).unwrap();
         assert!(check_approval(&p, None).is_err());
-        let other = prepare(&s, Action::ScaleOutByOne, 2, "prop-1").unwrap();
+        let other = prepare_proposed(&s, "prop-1", GOOD, 2, None).unwrap();
         let stale = Approval { proposal_id: "prop-1".into(), nonce: other.nonce.clone(), approver: "x".into(), method: "terminal".into() };
         assert!(check_approval(&p, Some(&stale)).is_err(), "same id, different nonce must fail");
         let wrong_id = Approval { proposal_id: "prop-2".into(), nonce: p.nonce.clone(), approver: "x".into(), method: "terminal".into() };
@@ -333,17 +607,27 @@ mod tests {
     #[test]
     fn execute_without_approval_errors_before_any_server_starts() {
         let s = settings();
-        let p = prepare(&s, Action::ScaleOutByOne, 2, "prop-1").unwrap();
+        let p = prepare_proposed(&s, "prop-1", GOOD, 2, None).unwrap();
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let err = rt.block_on(execute_approved(&s, &p, None)).unwrap_err().to_string();
         assert!(err.contains("no approval"), "{err}");
-        assert!(!s.audit_log.exists() || std::fs::read_to_string(&s.audit_log).unwrap().is_empty() || true);
+    }
+
+    #[test]
+    fn execute_rechecks_the_statement_after_approval() {
+        let s = settings();
+        let mut p = prepare_proposed(&s, "prop-1", GOOD, 2, None).unwrap();
+        let a = flag_approval(&p);
+        p.sql = format!("{GOOD}; DELETE FROM k8s.apps.deployments WHERE name = 'x'");
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let err = rt.block_on(execute_approved(&s, &p, Some(&a))).unwrap_err().to_string();
+        assert!(err.contains("more than one statement"), "{err}");
     }
 
     #[test]
     fn target_assertion_requires_namespace_prefix_and_label() {
         let s = settings();
-        let p = prepare(&s, Action::ScaleOutByOne, 2, "prop-1").unwrap();
+        let p = prepare_proposed(&s, "prop-1", GOOD, 2, None).unwrap();
         let ok = vec![json!({"name": "agentic-demo-checkout", "namespace": "agentic-demo", "demo_label": "agentic-demo"})];
         assert!(assert_demo_target(&s, &p, &ok).is_ok());
         assert!(assert_demo_target(&s, &p, &[]).is_err());

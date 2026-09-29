@@ -16,6 +16,7 @@ USECASE_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = USECASE_DIR.parent
 ENV_FILE = REPO_ROOT / ".env"
 QUERIES_DIR = USECASE_DIR / "queries"
+PROMPTS_DIR = USECASE_DIR / "prompts"
 RUNS_DIR = REPO_ROOT / "runs"
 PRICING_FILE = REPO_ROOT / "pricing.json"
 

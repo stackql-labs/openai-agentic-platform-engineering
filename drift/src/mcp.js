@@ -167,6 +167,15 @@ export class StackqlServer {
     return structuredOf(await this.callTool('server_info', {}));
   }
 
+  // MCP resources/read: the server publishes its instructions as stackql://docs/instructions.
+  async readResource(uri) {
+    const res = await this.client.readResource({ uri });
+    return (res?.contents || [])
+      .filter((c) => typeof c.text === 'string')
+      .map((c) => c.text)
+      .join('\n');
+  }
+
   async close() {
     try {
       await this.client?.close();

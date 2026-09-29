@@ -2,7 +2,7 @@
 -- providers: k8s
 -- params: sre_target_deployment, k8s_namespace, kube_cluster_addr, kube_protocol
 -- expected_columns: name, spec_replicas, ready_replicas, available_replicas
--- description: the post-mutation verification - polled by code until ready_replicas equals the approved replica count (or the timeout passes)
+-- description: code-owned - the post-mutation verification polled by code when the model-proposed verification SELECT fails validation or lacks the spec_replicas and ready_replicas columns
 SELECT
   json_extract(metadata, '$.name') AS name,
   json_extract(spec, '$.replicas') AS spec_replicas,

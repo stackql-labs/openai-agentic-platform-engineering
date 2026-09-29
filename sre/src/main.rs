@@ -2,11 +2,16 @@
 //! remediation. Built on the OpenAI Responses API (`async-openai`) with the embedded StackQL MCP
 //! server (`stackql-mcp`) as the tool surface.
 //!
-//!   sre setup                       pull the k8s provider, print server_info and the tool lists
+//!   sre setup                       pull the k8s provider, print server_info, the tool lists and
+//!                                   the server's stackql://docs/instructions resource
 //!   sre alert [--symptom "..."]     write runs/alert.json - the event trigger
 //!   sre run [--approve|--decline]   diagnose -> propose -> gate -> execute -> verify -> close
 //!   sre run --reset                 scale back to 1 through the same gate (no model)
-//!   sre validate-queries            validate_select_query over every SELECT in sre/queries/
+//!   sre validate-queries            validate_select_query over the code-owned and example SELECTs
+//!
+//! The model steps work from the intent prompts in `sre/prompts/` and discover resources and IO
+//! contracts through the StackQL discovery tools and the query library; no query pack is handed to
+//! them. The gate checks the statement the model proposes against an allowlist before a human sees it.
 
 mod agent;
 mod alert;
@@ -14,9 +19,9 @@ mod config;
 mod cost;
 mod gate;
 mod mcp;
+mod prompts;
 mod queries;
 
-use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
@@ -28,8 +33,8 @@ use serde_json::{json, Map, Value};
 use crate::agent::{run_step, Closeout, Diagnosis, Proposal, Step};
 use crate::config::Settings;
 use crate::cost::{Ledger, Pricing, StepUsage};
-use crate::gate::Action;
 use crate::mcp::Server;
+use crate::prompts::{compose, load_prompt, DISCOVERY_PROMPT};
 use crate::queries::{list_queries, load_query};
 
 #[derive(Parser)]
@@ -41,7 +46,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Pull the k8s provider into the approot and print server_info and the tool lists
+    /// Pull the k8s provider into the approot; print server_info, the tool lists and the server's
+    /// own instructions resource
     Setup,
     /// Fire the synthetic alert (writes runs/alert.json) - the event trigger, not a prompt
     Alert {
@@ -61,7 +67,7 @@ enum Command {
         #[arg(long)]
         reset: bool,
     },
-    /// Run validate_select_query over every SELECT under sre/queries/
+    /// Run validate_select_query over the code-owned and example SELECTs under sre/queries/
     ValidateQueries,
 }
 
@@ -119,6 +125,18 @@ async fn setup() -> Result<()> {
     let model = server.model_tools().await?;
     println!("tools advertised by the server ({}): {}", all.len(), all.iter().map(|t| t.name.to_string()).collect::<Vec<_>>().join(", "));
     println!("tools a model may hold ({}): {}", model.len(), model.iter().map(|t| t.name.to_string()).collect::<Vec<_>>().join(", "));
+    match server.instructions().await {
+        Some(text) => {
+            let head: Vec<&str> = text.lines().take(6).collect();
+            println!("{}:\n  {}\n  ...", mcp::INSTRUCTIONS_RESOURCE, head.join("\n  "));
+        }
+        None => println!("{} was not readable; runs continue without it", mcp::INSTRUCTIONS_RESOURCE),
+    }
+    let ctx = s.render_context();
+    for name in prompts::ROLE_PROMPTS.iter().chain([DISCOVERY_PROMPT].iter()) {
+        let text = load_prompt(&s.prompts_dir(), name, &ctx)?;
+        println!("prompt {name}.md renders ({} lines)", text.lines().count());
+    }
     server.shutdown().await?;
     println!("setup ok");
     Ok(())
@@ -126,7 +144,10 @@ async fn setup() -> Result<()> {
 
 async fn validate_queries() -> Result<()> {
     let s = Settings::load(false)?;
-    banner("validate queries", "validate_select_query over every SELECT in sre/queries/ (mutation templates are rendered only)");
+    banner(
+        "validate queries",
+        "validate_select_query over the code-owned and example SELECTs in sre/queries/ (the code-owned mutation template is rendered only)",
+    );
     let server = mcp::start_read_only(&s).await?;
     let ctx = s.render_context();
     let mut failures = 0;
@@ -134,7 +155,7 @@ async fn validate_queries() -> Result<()> {
         let file = q.path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
         println!("{} ({file}; providers {}; params {})", q.id, q.providers.join(","), q.params.join(","));
         println!("  {}", q.description);
-        let sql = q.render(&ctx, &[("replicas", "2")])?;
+        let sql = q.render(&ctx, &[("replicas", "1")])?;
         if q.is_mutation() {
             println!("  rendered (mutation template, not validated):");
             println!("  {}", sql.replace('\n', "\n  "));
@@ -156,32 +177,21 @@ async fn validate_queries() -> Result<()> {
     Ok(())
 }
 
-const DIAGNOSE_INSTRUCTIONS: &str = "You are the on-call SRE agent for a demo Kubernetes estate. An alert fired; nobody typed a prompt. \
-Investigate with SELECT statements only, by calling run_select_query with each statement from the query pack exactly as given \
-(pass format \"json\"). Do not rewrite the SQL and do not query anything outside the namespace in the pack. \
-The pack covers: sre/deployment_state (spec.replicas against readyReplicas/availableReplicas), sre/pods_for_deployment \
-(phase, readiness, restarts per pod) and sre/warning_events (Warning events in the namespace). Run each once. \
-Then produce the diagnosis: capacity actually ready versus desired, pod health, any Warning event that points elsewhere \
-(image pull, scheduling, probe failures, OOM), and the most likely cause. Be specific with names and numbers.";
-
-const PROPOSE_INSTRUCTIONS: &str = "You are proposing remediation for the diagnosis below. The menu is fixed:\n\
-- scale_out_by_one : raise the deployment's replica count by exactly one (current spec.replicas + 1)\n\
-- no_action        : when the evidence does not support a capacity change (for example pods are crash-looping, \
-image pull is failing or the deployment already has more than one ready replica)\n\
-Pick one. Name the exact target as namespace/deployment, the new replica count, the blast radius, the rollback as the \
-same StackQL statement with the previous value (UPDATE k8s.apps.deployments_scale SET spec = '{\"replicas\": <old>}' \
-WHERE name = ... AND namespace = ... AND cluster_addr = ... AND protocol = ...; never a kubectl command) and what the \
-verification SELECT must show. You do not execute anything: a human approves the rendered statement in the terminal.";
-
-const CLOSE_INSTRUCTIONS: &str = "Write the incident close-out note from the facts below: what the alert said, what the diagnosis \
-found, what was proposed, what was approved and executed (or declined), and what the verification SELECT showed. \
-One paragraph, matter of fact, for the on-call handover.";
-
-/// The verification loop: poll `sre/verify_replicas` until ready_replicas == target or timeout.
-async fn poll_recovery(server: &Server, s: &Settings, target: i64, usage: &mut StepUsage) -> Result<(bool, Vec<Value>)> {
+/// The verification loop: poll a SELECT until spec_replicas == target and ready_replicas >= target,
+/// or the timeout passes. The model-proposed SELECT (already validated) is used when it returns
+/// those columns; otherwise the poll falls back to the code-owned `sre/verify_replicas`.
+async fn poll_recovery(
+    server: &Server,
+    s: &Settings,
+    target: i64,
+    proposed: Option<&str>,
+    usage: &mut StepUsage,
+) -> Result<(bool, Vec<Value>)> {
     println!();
     println!("=== verify ===");
-    let sql = load_query(&s.queries_dir(), "sre/verify_replicas")?.render(&s.render_context(), &[])?;
+    let fallback = load_query(&s.queries_dir(), "sre/verify_replicas")?.render(&s.render_context(), &[])?;
+    let mut sql = proposed.map(str::to_string).unwrap_or_else(|| fallback.clone());
+    println!("  using the {} verification SELECT", if proposed.is_some() { "model-proposed" } else { "code-owned" });
     let start = Instant::now();
     let timeout = Duration::from_secs(s.verify_timeout_secs);
     let mut rows = Vec::new();
@@ -191,6 +201,12 @@ async fn poll_recovery(server: &Server, s: &Settings, target: i64, usage: &mut S
             println!("  verify SELECT failed: {e}");
             rows
         });
+        let has = |k: &str| rows.first().map(|r| r.get(k).is_some()).unwrap_or(false);
+        if sql != fallback && !rows.is_empty() && !(has("spec_replicas") && has("ready_replicas")) {
+            println!("  proposed SELECT lacks spec_replicas/ready_replicas - switching to code-owned sre/verify_replicas");
+            sql = fallback.clone();
+            continue;
+        }
         let get = |k: &str| rows.first().and_then(|r| r.get(k)).and_then(as_i64).unwrap_or(0);
         let (spec, ready, avail) = (get("spec_replicas"), get("ready_replicas"), get("available_replicas"));
         println!("  spec={spec} ready={ready} available={avail} ({}s)", start.elapsed().as_secs());
@@ -217,6 +233,29 @@ fn openai_client() -> Result<Client<OpenAIConfig>> {
     Ok(Client::new())
 }
 
+/// The model-proposed verification SELECT passes `validate_select_query` or is not used.
+async fn validate_proposed_select(ro: &Server, sql: &str) -> Option<String> {
+    let sql = sql.trim().trim_end_matches(';').trim();
+    if sql.is_empty() || !sql.to_ascii_uppercase().starts_with("SELECT") {
+        println!("no usable verification SELECT proposed - the poll uses code-owned sre/verify_replicas");
+        return None;
+    }
+    match ro.validate(sql).await {
+        Ok((true, _)) => {
+            println!("proposed verification SELECT validated");
+            Some(sql.to_string())
+        }
+        Ok((false, errors)) => {
+            println!("proposed verification SELECT failed validation ({}) - the poll uses code-owned sre/verify_replicas", errors.join("; "));
+            None
+        }
+        Err(e) => {
+            println!("validate_select_query failed ({e}) - the poll uses code-owned sre/verify_replicas");
+            None
+        }
+    }
+}
+
 async fn run(approve_flag: bool, decline_flag: bool) -> Result<()> {
     let s = Settings::load(true)?;
     let client = openai_client()?;
@@ -241,33 +280,34 @@ async fn run(approve_flag: bool, decline_flag: bool) -> Result<()> {
 
     let ro = mcp::start_read_only(&s).await?;
     let ctx = s.render_context();
-    let mut rendered = BTreeMap::new();
-    for id in ["sre/deployment_state", "sre/pods_for_deployment", "sre/warning_events"] {
-        rendered.insert(id.to_string(), load_query(&s.queries_dir(), id)?.render(&ctx, &[])?);
+    let server_instructions = ro.instructions().await;
+    if server_instructions.is_none() {
+        ledger.notes.push(format!("{} not readable: prompts carry the discovery briefing only", mcp::INSTRUCTIONS_RESOURCE));
     }
-    let pack = agent::query_pack(&rendered);
+    let discovery = load_prompt(&s.prompts_dir(), DISCOVERY_PROMPT, &ctx)?;
+    let prompt = |name: &str| -> Result<String> {
+        Ok(compose(&load_prompt(&s.prompts_dir(), name, &ctx)?, &discovery, server_instructions.as_deref()))
+    };
+    let tenancy = format!(
+        "Tenancy: namespace {} on cluster_addr {} (protocol {}); target deployment {}.",
+        s.k8s_namespace, s.kube_cluster_addr, s.kube_protocol, s.target_deployment
+    );
 
-    // 1. diagnose (reasoning tier, SELECT only)
+    // 1. diagnose (reasoning tier, SELECT and discovery tools, no query pack)
     println!();
     println!("=== diagnose ({}) ===", s.reasoning_model);
+    let diagnose_prompt = prompt("diagnose")?;
     let r1 = run_step(
         &client,
         Step {
-            label: "diagnose (SELECT only)",
+            label: "diagnose (discover + SELECT)",
             model: &s.reasoning_model,
             effort: &s.reasoning_effort,
-            instructions: DIAGNOSE_INSTRUCTIONS,
-            input: format!(
-                "Alert:\n{}\n\nTenancy: namespace {} on {} ({}). Only this namespace is in scope.\n\nQuery pack:\n{}",
-                serde_json::to_string_pretty(&alert)?,
-                s.k8s_namespace,
-                s.kube_cluster_addr,
-                s.kube_protocol,
-                pack
-            ),
+            instructions: &diagnose_prompt,
+            input: format!("Alert:\n{}\n\n{tenancy}", serde_json::to_string_pretty(&alert)?),
             server: Some(&ro),
             output: Some(agent::diagnosis_schema()),
-            max_turns: 12,
+            max_turns: 20,
         },
     )
     .await?;
@@ -281,40 +321,35 @@ async fn run(approve_flag: bool, decline_flag: bool) -> Result<()> {
     println!("hypothesis: {}", diag.hypothesis);
     payload.insert("diagnosis".into(), serde_json::to_value(&diag)?);
 
-    // 2. propose (reasoning tier, no tools)
+    // 2. propose (reasoning tier, discovery tools: it finds the mutation's IO contract itself)
     println!();
     println!("=== propose ({}) ===", s.reasoning_model);
+    let propose_prompt = prompt("propose")?;
     let r2 = run_step(
         &client,
         Step {
-            label: "propose",
+            label: "propose (discover contract)",
             model: &s.reasoning_model,
             effort: &s.reasoning_effort,
-            instructions: PROPOSE_INSTRUCTIONS,
-            input: format!(
-                "Diagnosis:\n{}\n\nTarget deployment: {}/{} (cluster_addr {}, protocol {})",
-                serde_json::to_string_pretty(&diag)?,
-                s.k8s_namespace,
-                s.target_deployment,
-                s.kube_cluster_addr,
-                s.kube_protocol
-            ),
-            server: None,
+            instructions: &propose_prompt,
+            input: format!("Diagnosis:\n{}\n\n{tenancy}", serde_json::to_string_pretty(&diag)?),
+            server: Some(&ro),
             output: Some(agent::proposal_schema()),
-            max_turns: 2,
+            max_turns: 16,
         },
     )
     .await?;
     let prop: Proposal = agent::parse_output("propose", &r2.text)?;
     ledger.record(r2.usage);
-    println!("action: {}  target: {}  new_replicas: {}", prop.action, prop.target, prop.new_replicas);
+    println!("action: {}  target: {}  resource: {}  new_replicas: {}", prop.action, prop.target, prop.resource, prop.new_replicas);
     println!("rationale: {}", prop.rationale);
     println!("blast radius: {}", prop.blast_radius);
+    println!("statement: {}", prop.statement);
+    println!("verification: {}", prop.verification_select);
     println!("rollback: {}", prop.rollback_statement);
-    println!("verification: {}", prop.expected_verification);
     payload.insert("proposal".into(), serde_json::to_value(&prop)?);
 
-    // 3. gate -> 4. execute -> 5. verify
+    // 3. gate (allowlist check, then the human) -> 4. execute -> 5. verify
     let mut outcome = "no_action";
     let mut execution: Option<gate::Execution> = None;
     let mut verification: Vec<Value> = Vec::new();
@@ -323,35 +358,47 @@ async fn run(approve_flag: bool, decline_flag: bool) -> Result<()> {
             println!("proposal outside the menu bounds (new_replicas {} vs spec {} + 1): treated as no_action", prop.new_replicas, diag.capacity.spec_replicas);
             ledger.notes.push("proposal outside menu bounds: no mutation".into());
         } else {
+            let verification_sql = validate_proposed_select(&ro, &prop.verification_select).await;
             let proposal_id = format!("prop-{}", cost::short_id(6));
-            let pending = gate::prepare(&s, Action::ScaleOutByOne, prop.new_replicas, &proposal_id)?;
-            payload.insert("pending".into(), serde_json::to_value(&pending)?);
-            let approval = if decline_flag {
-                gate::print_gate(&pending);
-                println!("--decline given: declining at the gate");
-                None
-            } else if approve_flag {
-                Some(gate::flag_approval(&pending))
-            } else {
-                gate::ask_terminal(&pending)
-            };
-            match approval {
-                None => {
-                    outcome = "declined";
-                    println!("declined - no mutation will run");
-                    ledger.notes.push("gate declined: no mutation executed (0 mutation calls)".into());
+            match gate::prepare_proposed(&s, &proposal_id, &prop.statement, prop.new_replicas, verification_sql) {
+                Err(e) => {
+                    outcome = "rejected";
+                    println!();
+                    println!("=== approval gate ===");
+                    println!("statement rejected before approval: {e:#}");
+                    println!("{}", prop.statement);
+                    ledger.notes.push(format!("gate rejected the proposed statement: {e:#} (0 mutation calls)"));
                 }
-                Some(a) => {
-                    let exec = gate::execute_approved(&s, &pending, Some(&a)).await?;
-                    ledger.record(gate::execution_usage());
-                    payload.insert("execution".into(), serde_json::to_value(&exec)?);
-                    execution = Some(exec);
-                    let mut v = StepUsage::new("verify (SELECT poll)", "-");
-                    let (ok, rows) = poll_recovery(&ro, &s, prop.new_replicas, &mut v).await?;
-                    ledger.record(v);
-                    verification = rows;
-                    outcome = if ok { "recovered" } else { "not_recovered" };
-                    println!("verification: {}", if ok { "ready replicas match the approved count" } else { "timed out before ready replicas matched" });
+                Ok(pending) => {
+                    payload.insert("pending".into(), serde_json::to_value(&pending)?);
+                    let approval = if decline_flag {
+                        gate::print_gate(&pending);
+                        println!("--decline given: declining at the gate");
+                        None
+                    } else if approve_flag {
+                        Some(gate::flag_approval(&pending))
+                    } else {
+                        gate::ask_terminal(&pending)
+                    };
+                    match approval {
+                        None => {
+                            outcome = "declined";
+                            println!("declined - no mutation will run");
+                            ledger.notes.push("gate declined: no mutation executed (0 mutation calls)".into());
+                        }
+                        Some(a) => {
+                            let exec = gate::execute_approved(&s, &pending, Some(&a)).await?;
+                            ledger.record(gate::execution_usage());
+                            payload.insert("execution".into(), serde_json::to_value(&exec)?);
+                            execution = Some(exec);
+                            let mut v = StepUsage::new("verify (SELECT poll)", "-");
+                            let (ok, rows) = poll_recovery(&ro, &s, pending.replicas, pending.verification_sql.as_deref(), &mut v).await?;
+                            ledger.record(v);
+                            verification = rows;
+                            outcome = if ok { "recovered" } else { "not_recovered" };
+                            println!("verification: {}", if ok { "ready replicas match the approved count" } else { "timed out before ready replicas matched" });
+                        }
+                    }
                 }
             }
         }
@@ -360,7 +407,7 @@ async fn run(approve_flag: bool, decline_flag: bool) -> Result<()> {
     }
     payload.insert("verification".into(), Value::Array(verification.clone()));
 
-    // 6. close-out (sweep tier)
+    // 6. close-out (sweep tier, no tools)
     println!();
     println!("=== close-out ({}) ===", s.sweep_model);
     let facts = json!({
@@ -371,13 +418,14 @@ async fn run(approve_flag: bool, decline_flag: bool) -> Result<()> {
         "verification": verification,
         "outcome": outcome,
     });
+    let closeout_prompt = load_prompt(&s.prompts_dir(), "closeout", &ctx)?;
     let r3 = run_step(
         &client,
         Step {
             label: "close-out note",
             model: &s.sweep_model,
             effort: &s.sweep_effort,
-            instructions: CLOSE_INSTRUCTIONS,
+            instructions: &closeout_prompt,
             input: serde_json::to_string_pretty(&facts)?,
             server: None,
             output: Some(agent::closeout_schema()),
@@ -398,14 +446,15 @@ async fn run(approve_flag: bool, decline_flag: bool) -> Result<()> {
 }
 
 /// `sre run --reset`: put the deployment back to one replica through the same gate. Operator
-/// tooling: no model call, same assertion, same single statement, same verification.
+/// tooling: no model call, the code-owned `sre/reset_scale` statement, the same allowlist check,
+/// assertion and verification.
 async fn run_reset(approve_flag: bool, decline_flag: bool) -> Result<()> {
     let s = Settings::load(false)?;
     banner("agentic sre - reset", "scale the target back to 1 replica through the approval gate (no model)");
     let mut ledger = Ledger::new("sre-reset", Pricing::load(&s.repo_root)?);
     let mut payload: Map<String, Value> = Map::new();
     let proposal_id = format!("reset-{}", cost::short_id(6));
-    let pending = gate::prepare(&s, Action::ResetToOne, 1, &proposal_id)?;
+    let pending = gate::prepare_reset(&s, &proposal_id)?;
     payload.insert("pending".into(), serde_json::to_value(&pending)?);
     let approval = if decline_flag {
         gate::print_gate(&pending);
@@ -423,7 +472,7 @@ async fn run_reset(approve_flag: bool, decline_flag: bool) -> Result<()> {
         payload.insert("execution".into(), serde_json::to_value(&exec)?);
         let ro = mcp::start_read_only(&s).await?;
         let mut v = StepUsage::new("verify (SELECT poll)", "-");
-        let (ok, rows) = poll_recovery(&ro, &s, 1, &mut v).await?;
+        let (ok, rows) = poll_recovery(&ro, &s, 1, None, &mut v).await?;
         ledger.record(v);
         ro.shutdown().await?;
         payload.insert("verification".into(), Value::Array(rows));

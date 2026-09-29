@@ -1,8 +1,11 @@
 """Command line entry point: `uv run python -m edge <setup|validate|run|restore> [flags]`.
 
-run:     recon (mini tier, read-only server) -> decision (frontier tier, no tools) -> approval
+run:     read the server's instructions resource -> recon (mini tier, read-only server, intent
+         from edge/prompts/recon.md) -> decision (frontier tier, read-only server, intent from
+         edge/prompts/decide.md, proposes the exact statement) -> allowlist check -> approval
          gate -> one REPLACE -> verify -> decision record -> cost/trace block
-restore: put BASELINE_THRESHOLD back through the same gate (no model calls)
+restore: put BASELINE_THRESHOLD back with the code-owned statement through the same gate (no
+         model calls)
 """
 
 from __future__ import annotations
@@ -18,11 +21,18 @@ from agents import gen_trace_id, trace
 from rich.markup import escape
 from rich.table import Table
 
-from . import gate, records
+from . import gate, prompts, records
 from .config import ENV_FILE, ConfigError, settings
 from .costs import RunLedger, console
-from .decide import Decision, Policy, rollback_statement, run_decision
-from .mcp import read_only_server, stackql_mcp_command, stackql_server, tool_is_error, tool_text
+from .decide import Decision, Policy, run_decision
+from .mcp import (
+    read_only_server,
+    read_server_instructions,
+    stackql_mcp_command,
+    stackql_server,
+    tool_is_error,
+    tool_text,
+)
 from .queries import list_queries
 from .recon import ReconReport, run_recon
 
@@ -49,9 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="edge",
         description=(
-            "Edge autopilot: read live Cloudflare zone analytics and the rate limit ruleset, "
-            "decide whether traffic is elevated, tighten the rate limit behind an approval gate, "
-            "and log the decision. Reads the repo-root .env."
+            "Edge autopilot: agents working from intent prompts discover a Cloudflare zone's "
+            "traffic and rate limit rule through the StackQL tools, decide whether traffic is "
+            "elevated, propose the tightening statement, and code executes it behind an approval "
+            "gate and logs the decision. Reads the repo-root .env."
         ),
     )
     sub = p.add_subparsers(dest="command", required=True)
@@ -60,11 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="pull the cloudflare and github providers into STACKQL_APPROOT and print server_info",
     )
     sub.add_parser(
-        "validate", help="run validate_select_query for every SELECT under edge/queries/"
+        "validate",
+        help=(
+            "render every prompt under edge/prompts/ and run validate_select_query for the "
+            "example and code-owned SELECTs under edge/queries/"
+        ),
     )
     run = sub.add_parser(
         "run",
-        help="recon -> decision -> approval gate -> REPLACE -> verify -> decision record",
+        help="recon -> decision -> allowlist -> approval gate -> REPLACE -> verify -> record",
     )
     _add_gate_flags(run)
     run.add_argument(
@@ -79,8 +94,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="requests per second at or above which the policy tightens (default ELEVATED_RPS)",
     )
+    run.add_argument(
+        "--no-server-instructions",
+        action="store_true",
+        help="do not read stackql://docs/instructions from the server (local briefing only)",
+    )
     restore = sub.add_parser(
-        "restore", help="put BASELINE_THRESHOLD back on the demo rule through the same gate"
+        "restore",
+        help="put BASELINE_THRESHOLD back on the demo rule with the code-owned statement, same gate",
     )
     _add_gate_flags(restore)
     return p
@@ -119,6 +140,24 @@ def _require_zone() -> str:
     return zone
 
 
+def _prompt_values(
+    zone: str, policy: Policy, since: str, until: str, window_minutes: int
+) -> dict[str, Any]:
+    """Every placeholder the prompt files may use, from env and the run's window."""
+    return {
+        "cloudflare_zone_id": zone,
+        "demo_prefix": settings().demo_prefix,
+        "since": since,
+        "until": until,
+        "window_minutes": window_minutes,
+        "window_seconds": window_minutes * 60,
+        "elevated_rps": policy.elevated_rps,
+        "tightened_threshold": policy.tightened_threshold,
+        "baseline_threshold": policy.baseline_threshold,
+        "rate_limit_period": policy.period,
+    }
+
+
 # --- setup ---------------------------------------------------------------------------------------
 
 
@@ -149,7 +188,37 @@ async def cmd_setup() -> int:
 # --- validate ------------------------------------------------------------------------------------
 
 
+def _validate_prompts() -> int:
+    """Every prompt renders with the run's placeholder set; report the placeholders each uses."""
+    s = settings()
+    now = datetime.now(UTC).replace(microsecond=0)
+    policy = Policy(
+        s.elevated_rps, s.tightened_threshold, s.baseline_threshold, s.rate_limit_period
+    )
+    values = _prompt_values(
+        s.cloudflare_zone_id or "placeholder-zone",
+        policy,
+        (now - timedelta(minutes=30)).strftime(TS),
+        now.strftime(TS),
+        30,
+    )
+    failures = 0
+    for name in (*prompts.ROLES, prompts.DISCOVERY):
+        try:
+            text = prompts.render_prompt(name, **values)
+            used = prompts.placeholders(name)
+            console.print(
+                f"[green]PASS[/green] prompts/{name}.md  {len(text.splitlines())} lines  "
+                f"placeholders: {', '.join(used) or '-'}"
+            )
+        except (ValueError, FileNotFoundError) as e:
+            failures += 1
+            console.print(f"[red]FAIL[/red] prompts/{name}.md  {escape(str(e))}")
+    return failures
+
+
 async def cmd_validate() -> int:
+    failures = _validate_prompts()
     now = datetime.now(UTC).replace(microsecond=0)
     fixed = {
         "since": (now - timedelta(minutes=30)).strftime(TS),
@@ -160,7 +229,6 @@ async def cmd_validate() -> int:
     server = stackql_server(
         name="stackql-validate", mode="read_only", allowed_tools=("validate_select_query",)
     )
-    failures = 0
     planned = 0
     async with server:
         for q in selects:
@@ -190,10 +258,12 @@ async def cmd_validate() -> int:
             else:
                 failures += 1
                 mark = "[red]FAIL[/red]"
-            console.print(f"{mark} {q.id}  {'' if valid else escape(str(errors)[:400])}")
+            kind = "example" if q.id.startswith("edge/examples/") else "code-owned"
+            console.print(f"{mark} {q.id} ({kind})  {'' if valid else escape(str(errors)[:400])}")
     console.print(
-        f"{len(selects) - failures}/{len(selects)} SELECT queries plan "
-        f"({planned} could not execute with the configured credentials)"
+        f"{len(selects)} SELECT queries checked "
+        f"({planned} could not execute with the configured credentials); "
+        f"{failures} failure(s) across prompts and queries"
     )
     return 0 if failures == 0 else 1
 
@@ -214,7 +284,10 @@ def _print_report(report: ReconReport, policy: Policy) -> None:
         f"{report.requests_per_second:.3f} (elevated at {policy.elevated_rps})",
     )
     t.add_row("ruleset / rule", f"{report.ruleset_id or '-'} / {report.rule_id or '-'}")
+    t.add_row("rule description", report.rule_description or "-")
     t.add_row("threshold / period", f"{report.threshold} per {report.period}s")
+    t.add_row("resources read", ", ".join(report.resources_read) or "-")
+    t.add_row("statements run", str(len(report.statements)))
     console.print(t)
     if report.notes:
         console.print(f"notes: {report.notes}")
@@ -234,14 +307,19 @@ async def _write_record(
     s = settings()
     if s.github_decisions_repo:
         owner, repo = records.split_repo(s.github_decisions_repo)
-        console.rule("decision record - GitHub issue (second gated statement)")
-        pending = gate.prepare(
-            "file_decision_issue",
-            records.issue_params(record, owner, repo),
-            f"{record.record_id}-record",
-        )
-        approval = _resolve_approval(pending, args)
-        if approval is not None:
+        console.rule("decision record - GitHub issue (second gated statement, code-owned)")
+        try:
+            pending = gate.prepare_code(
+                "file_decision_issue",
+                records.issue_params(record, owner, repo),
+                f"{record.record_id}-record",
+            )
+        except gate.StatementRejected as e:
+            console.print(f"[red]issue statement rejected:[/red] {e}")
+            ledger.notes.append(f"github issue statement rejected: {e}")
+            pending = None
+        approval = _resolve_approval(pending, args) if pending is not None else None
+        if pending is not None and approval is not None:
             try:
                 out = await gate.execute_approved(
                     pending, approval, assert_target=gate.assert_decisions_repo(owner, repo)
@@ -259,6 +337,20 @@ async def _write_record(
     return {"sink": "jsonl", "path": str(path)}
 
 
+def _rollback_for(decision: Decision, previous_threshold: int, ledger: RunLedger) -> str | None:
+    """The model's rollback statement, accepted only if it passes the same allowlist with the
+    previous threshold; otherwise the operator has `restore`."""
+    if not decision.rollback_statement.strip():
+        return None
+    try:
+        return gate.check_statement(
+            "set_rate_limit_threshold", decision.rollback_statement, threshold=previous_threshold
+        )
+    except gate.StatementRejected as e:
+        ledger.notes.append(f"proposed rollback statement rejected ({e}); use `edge restore`")
+        return None
+
+
 async def cmd_run(args: argparse.Namespace) -> int:
     s = settings()
     zone = _require_zone()
@@ -274,18 +366,35 @@ async def cmd_run(args: argparse.Namespace) -> int:
     since = until - timedelta(minutes=window_minutes)
     since_s, until_s = since.strftime(TS), until.strftime(TS)
     proposal_id = f"edge-{until.strftime('%Y%m%dT%H%M%SZ')}"
+    values = _prompt_values(zone, policy, since_s, until_s, window_minutes)
     gate_result: dict[str, Any] | None = None
     rc = 0
 
     with trace("edge autopilot", trace_id=ledger.trace_id):
-        console.rule("recon - SWEEP_MODEL on a read-only server")
         console.print(f"zone {zone}  window {since_s} -> {until_s} ({window_minutes} min)")
         async with read_only_server("stackql-ro") as ro:
-            report = await run_recon(ro, since_s, until_s, window_minutes * 60, ledger)
-        _print_report(report, policy)
+            server_text = None
+            if not args.no_server_instructions:
+                server_text = await read_server_instructions(ro, prompts.SERVER_INSTRUCTIONS_URI)
+            if server_text is None:
+                ledger.notes.append("server instructions resource not appended to the briefing")
+            briefing = prompts.discovery_briefing(server_text)
 
-        console.rule("decision - REASONING_MODEL, no tools")
-        decision = await run_decision(report, policy, ledger)
+            console.rule("recon - SWEEP_MODEL on a read-only server, intent from prompts/recon.md")
+            report = await run_recon(
+                ro,
+                prompts.instructions_for("recon", briefing, **values),
+                window_minutes * 60,
+                ledger,
+            )
+            _print_report(report, policy)
+
+            console.rule(
+                "decision - REASONING_MODEL on a read-only server, intent from prompts/decide.md"
+            )
+            decision = await run_decision(
+                ro, prompts.instructions_for("decide", briefing, **values), report, policy, ledger
+            )
         _print_decision(decision)
 
         record = records.DecisionRecord(
@@ -305,36 +414,48 @@ async def cmd_run(args: argparse.Namespace) -> int:
             rationale=decision.rationale,
             risk=decision.risk,
             trace_id=ledger.trace_id,
+            resources_read=report.resources_read,
         )
 
         if decision.action == "tighten":
-            pending = gate.prepare(
-                "set_rate_limit_threshold",
-                {"threshold": decision.new_threshold, "demo_prefix": s.demo_prefix},
-                proposal_id,
-            )
-            record.rollback_statement = rollback_statement(report.threshold)
-            approval = _resolve_approval(pending, args)
-            if approval is None:
-                record.outcome = "declined"
+            try:
+                pending = gate.prepare_proposed(
+                    "set_rate_limit_threshold",
+                    decision.statement,
+                    proposal_id,
+                    threshold=decision.new_threshold,
+                    verify_sql=decision.verification_select,
+                )
+            except gate.StatementRejected as e:
+                console.print(f"[red]proposed statement rejected by the allowlist:[/red] {e}")
+                console.print(f"[dim]{escape(decision.statement or '(empty)')}[/dim]")
+                record.outcome = f"rejected: {e}"
+                record.statement = decision.statement or None
+                rc = 1
             else:
-                try:
-                    gate_result = await gate.execute_approved(
-                        pending,
-                        approval,
-                        assert_target=gate.assert_demo_rule(),
-                        verify=gate.verify_threshold(decision.new_threshold),
-                    )
-                    ledger.gate_statements += 1
-                    record.outcome = "executed"
-                    record.statement = pending.sql
-                    record.approved_by = approval.approver
-                    record.approval_method = approval.method
-                    console.print(f"rollback: {record.rollback_statement}")
-                except (gate.TargetAssertionFailed, gate.VerificationFailed, RuntimeError) as e:
-                    console.print(f"[red]{type(e).__name__}:[/red] {e}")
-                    record.outcome = f"failed: {e}"
-                    rc = 1
+                record.rollback_statement = _rollback_for(decision, report.threshold, ledger)
+                approval = _resolve_approval(pending, args)
+                if approval is None:
+                    record.outcome = "declined"
+                else:
+                    try:
+                        gate_result = await gate.execute_approved(
+                            pending,
+                            approval,
+                            assert_target=gate.assert_demo_rule(),
+                            verify=gate.verify_threshold(decision.new_threshold),
+                        )
+                        ledger.gate_statements += 1
+                        record.outcome = "executed"
+                        record.statement = pending.sql
+                        record.approved_by = approval.approver
+                        record.approval_method = approval.method
+                        if record.rollback_statement:
+                            console.print(f"rollback: {escape(record.rollback_statement)}")
+                    except (gate.TargetAssertionFailed, gate.VerificationFailed, RuntimeError) as e:
+                        console.print(f"[red]{type(e).__name__}:[/red] {e}")
+                        record.outcome = f"failed: {e}"
+                        rc = 1
         else:
             console.print("hold - no statement proposed, nothing to approve")
 
@@ -364,7 +485,7 @@ async def cmd_restore(args: argparse.Namespace) -> int:
     proposal_id = f"edge-restore-{ledger.started_at.strftime('%Y%m%dT%H%M%SZ')}"
     rc = 0
 
-    console.rule("restore - current rule (read-only server)")
+    console.rule("restore - current rule (read-only server, code-owned SELECT)")
     try:
         async with read_only_server("stackql-ro") as ro:
             row = await gate.read_rate_limit_rule(ro)
@@ -388,9 +509,9 @@ async def cmd_restore(args: argparse.Namespace) -> int:
         previous_threshold=previous,
         new_threshold=s.baseline_threshold,
         period=period,
-        rationale="operator restore to BASELINE_THRESHOLD",
+        rationale="operator restore to BASELINE_THRESHOLD (code-owned statement)",
     )
-    pending = gate.prepare(
+    pending = gate.prepare_code(
         "set_rate_limit_threshold",
         {"threshold": s.baseline_threshold, "demo_prefix": s.demo_prefix},
         proposal_id,

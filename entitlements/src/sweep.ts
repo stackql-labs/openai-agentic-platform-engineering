@@ -2,22 +2,24 @@
  * The recertification sweep, end to end:
  *
  *   1. start one read-only StackQL MCP server holding the credentials for aws, azure, google,
- *      github and the IdP (entra_id or okta)
- *   2. the sweep-tier agent runs the query pack (SELECT only) and classifies rows into findings
+ *      github and the IdP (entra_id or okta); read stackql://docs/instructions from it
+ *   2. the sweep-tier agent works from prompts/sweep.md: it discovers the resources through the
+ *      StackQL tools and the query library, runs SELECTs, and classifies rows into findings
  *   3. findings at or above ESCALATION_SEVERITY go to the reasoning-tier agent
  *   4. artifacts: console table + brief, runs/entitlements-<ts>.json, and the recertification
  *      report runs/entitlements-recertification-<ts>.md
  *   5. the cost and trace block
  *
- * --dry-run starts the server, prints the query pack and the tool list the model would see,
- * validates every static SELECT with validate_select_query, and exits without calling a model.
+ * --dry-run starts the server, prints the rendered sweep instructions and the tool list the
+ * model would see, validates the example SELECTs, and exits without calling a model.
  */
 
 import { RunContext, getAllMcpTools, run, withTrace } from '@openai/agents';
-import { buildPack, makeAgent, packText, reasoningInstructions, sweepInstructions } from './agents.ts';
-import { requireEnv, settings, type Settings } from './config.ts';
+import { makeAgent, reasoningInstructions, sweepInstructions } from './agents.ts';
+import { providerConfigured, requireEnv, settings, type Settings } from './config.ts';
 import { RunLedger } from './costs.ts';
 import { readOnlyServer, withServer } from './mcp.ts';
+import { readServerInstructions } from './prompts.ts';
 import { banner, printAssessments, printFindings, writeRecertificationReport } from './report.ts';
 import {
   AssessmentSetSchema,
@@ -28,8 +30,7 @@ import {
   type Finding,
   type FindingSet,
 } from './schemas.ts';
-import { listQueriesTool, renderQueryTool } from './tools.ts';
-import { validateSql } from './validate.ts';
+import { validateExamples } from './validate.ts';
 
 export interface SweepOptions {
   dryRun: boolean;
@@ -44,36 +45,40 @@ function findingsBlock(findings: Finding[]): string {
   );
 }
 
+function sweepInput(s: Settings): string {
+  const skipped = s.providers.filter((p) => !providerConfigured(p));
+  return [
+    'Scenario: entitlements recertification sweep.',
+    `Run started ${new Date().toISOString()}. IdP provider: ${s.idpProvider}.`,
+    skipped.length ? `Providers without credentials in this run (skip them): ${skipped.join(', ')}.` : 'All providers in scope have credentials configured.',
+    'Begin the sweep.',
+  ].join('\n');
+}
+
 export async function dryRun(s: Settings): Promise<number> {
-  const pack = buildPack(s);
-  console.log('\nquery pack (what the sweep agent receives):\n');
-  console.log(packText(pack));
   let failures = 0;
   await withServer(readOnlyServer(), async (server) => {
+    const serverInstructions = await readServerInstructions(server);
+    const instructions = sweepInstructions(s, serverInstructions);
+    console.log('\nsweep instructions (what the sweep agent receives):\n');
+    console.log(instructions);
+    console.log(`\n(${instructions.length} characters; server instructions ${serverInstructions ? 'included' : 'unavailable'})`);
     // the SDK applies the tool filter when it builds an agent's tools for a run (it needs the
     // agent and a run context), not in listTools(); resolve them the same way the runner does
     const sweeper = makeAgent(s.sweep, {
       name: 'entitlements-sweep',
-      instructions: sweepInstructions(s),
+      instructions,
       mcpServers: [server],
-      tools: [renderQueryTool, listQueriesTool(s.idpProvider)],
       outputType: FindingSetSchema,
     });
     const raw = await server.listTools();
     const tools = await getAllMcpTools({ mcpServers: [server], runContext: new RunContext(), agent: sweeper });
     const names = tools.map((t) => t.name);
-    console.log(`server advertises ${raw.length} tools; after the read-only filter the model sees ${names.length}: ${names.join(', ')}`);
+    console.log(`\nserver advertises ${raw.length} tools; after the read-only filter the model sees ${names.length}: ${names.join(', ')}`);
     const forbidden = names.filter((n) => /mutation|lifecycle|pull_provider|reload_credentials/.test(n));
     if (forbidden.length) throw new Error(`read-only server exposed ${forbidden.join(', ')}`);
-    console.log('\nvalidation of the static queries (validate_select_query per provider SELECT, sqlite shape check for CTEs):');
-    for (const e of pack) {
-      if (e.status !== 'static' || !e.sql) continue;
-      const parts = await validateSql(server, e.sql);
-      const ok = parts.every((p) => p.ok);
-      if (!ok) failures += 1;
-      console.log(`  ${ok ? 'pass' : 'FAIL'}  ${e.query.id}`);
-      for (const p of parts) if (!p.ok) console.log(`        ${p.label}: ${p.detail}`);
-    }
+    console.log('\nvalidation of the example SELECTs (validate_select_query):');
+    failures = await validateExamples(server, s);
   });
   console.log(`\ndry run complete: no model called, nothing written${failures ? `, ${failures} validation failure(s)` : ''}`);
   return failures ? 1 : 0;
@@ -89,8 +94,7 @@ export async function runSweep(opts: SweepOptions): Promise<number> {
   for (const v of ['OPENAI_API_KEY', 'SWEEP_MODEL', 'REASONING_MODEL']) requireEnv(v);
 
   const ledger = new RunLedger('entitlements');
-  const pack = buildPack(s);
-  for (const e of pack) if (e.status === 'skipped') ledger.notes.push(`${e.query.id} skipped: ${e.note}`);
+  for (const p of s.providers) if (!providerConfigured(p)) ledger.notes.push(`${p} skipped: credentials not configured`);
 
   let fs: FindingSet = { scenario: 'entitlements', findings: [], summary: '' };
   let assessments: Assessment[] = [];
@@ -99,15 +103,16 @@ export async function runSweep(opts: SweepOptions): Promise<number> {
   await withTrace('entitlements sweep', async (trace) => {
     ledger.traceId = trace.traceId;
     await withServer(readOnlyServer('stackql-entitlements'), async (server) => {
+      const serverInstructions = await readServerInstructions(server);
+      if (!serverInstructions) ledger.notes.push('stackql://docs/instructions unavailable; prompts carried the local discovery briefing only');
       const sweeper = makeAgent(s.sweep, {
         name: 'entitlements-sweep',
-        instructions: sweepInstructions(s),
+        instructions: sweepInstructions(s, serverInstructions),
         mcpServers: [server],
-        tools: [renderQueryTool, listQueriesTool(s.idpProvider)],
         outputType: FindingSetSchema,
       });
-      const r1 = await run(sweeper, `Scenario: entitlements\n\nQuery pack:\n\n${packText(pack)}`, { maxTurns: 60 });
-      ledger.record('sweep (classify)', s.sweep.model, r1);
+      const r1 = await run(sweeper, sweepInput(s), { maxTurns: 80 });
+      ledger.record('sweep (discover + classify)', s.sweep.model, r1);
       if (!r1.finalOutput) throw new Error('sweep agent produced no structured output');
       fs = FindingSetSchema.parse(r1.finalOutput);
       fs.scenario = 'entitlements';
@@ -118,14 +123,14 @@ export async function runSweep(opts: SweepOptions): Promise<number> {
         console.log(`\nescalating ${candidates.length} finding(s) at or above '${s.escalationSeverity}' to ${s.reasoning.model}`);
         const reasoner = makeAgent(s.reasoning, {
           name: 'entitlements-reasoning',
-          instructions: reasoningInstructions(s),
+          instructions: reasoningInstructions(s, serverInstructions),
           mcpServers: [server],
           outputType: AssessmentSetSchema,
         });
         const r2 = await run(
           reasoner,
           `Escalated findings (JSON):\n${findingsBlock(candidates)}\n\nAll findings from this sweep, for correlation:\n${findingsBlock(fs.findings)}`,
-          { maxTurns: 25 },
+          { maxTurns: 30 },
         );
         ledger.record('reasoning (assess)', s.reasoning.model, r2);
         if (!r2.finalOutput) throw new Error('reasoning agent produced no structured output');

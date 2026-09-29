@@ -1,4 +1,7 @@
-// Query loader. All SQL lives in drift/queries/ - one file per statement with a header comment:
+// Query loader for the code-owned SQL in drift/queries/: the snapshot sources (a mechanical job
+// with no model), the local delta over sqlite, and the perturb target/mutation statements (operator
+// tooling). The model never sees these; it works from drift/prompts/ and discovers resources at run
+// time. One file per statement with a header comment:
 //
 //   -- id: drift/snapshot_aws_security_groups
 //   -- providers: aws

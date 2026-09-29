@@ -1,6 +1,8 @@
 """The decision record. Every run appends one to runs/edge-decisions.jsonl at the repo root; when
 GITHUB_DECISIONS_REPO is set the record is filed as an issue instead, through the same approval
-gate as the rate limit change (the INSERT is rendered from edge/queries/decision_issue.sql).
+gate as the rate limit change. The INSERT is code-owned (edge/queries/decision_issue.sql): the
+record is authored by code, no model is involved in this step, and the query library has no
+issue-creation entry to discover, so there is nothing for a model to add here.
 
 The original edgepilot published its decision to a Confluent Kafka topic
 (edge-autopilot-decisions). StackQL has a confluent provider, so the same record could be written
@@ -40,6 +42,9 @@ class DecisionRecord(BaseModel):
     approved_by: str | None = None
     approval_method: str | None = None
     trace_id: str | None = None
+    resources_read: list[str] = Field(
+        default_factory=list, description="provider.service.resource the recon agent discovered"
+    )
     sink: str = "jsonl"
 
 
@@ -90,13 +95,16 @@ def issue_body(record: DecisionRecord) -> str:
         lines += ["## Statement executed", "", "```sql", record.statement, "```", ""]
     if record.rollback_statement:
         lines += ["## Rollback", "", "```sql", record.rollback_statement, "```", ""]
+    if record.resources_read:
+        lines.append(f"Resources read by recon: {', '.join(record.resources_read)}  ")
     if record.trace_id:
         lines.append(
             f"Trace: https://platform.openai.com/traces/trace?trace_id={record.trace_id}  "
         )
     lines.append(
-        "Filed by the edge autopilot. The rate limit change, if any, ran as one StackQL "
-        "statement after explicit approval; this issue was filed through the same gate."
+        "Filed by the edge autopilot. The rate limit change, if any, was discovered and proposed "
+        "by the decision agent and ran as one StackQL statement after an allowlist check and "
+        "explicit approval; this issue was filed through the same gate."
     )
     return "\n".join(lines)
 

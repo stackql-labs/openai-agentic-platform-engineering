@@ -49,8 +49,11 @@ def test_append_jsonl_appends_one_line_per_record(tmp_path):
 
 
 def test_issue_statement_is_escaped_and_carries_the_prefix():
-    sql = records.render_issue_statement(_record(), "acme", "ops")
+    sql = records.render_issue_statement(
+        _record(resources_read=["cloudflare.rulesets.phases"]), "acme", "ops"
+    )
     assert sql.startswith("INSERT INTO github.issues.issues (owner, repo, title, body, labels)")
+    assert "Resources read by recon: cloudflare.rulesets.phases" in sql
     assert "'acme', 'ops'" in sql
     assert "it''s 7.5 rps" in sql  # single quote doubled inside the literal
     assert "[agentic-demo] edge autopilot: tighten (executed) rate limit 100 -> 30 per 10s" in sql
@@ -138,3 +141,58 @@ def test_cross_check_recomputes_from_tool_outputs():
         10,
     )
     assert "code recomputed totals" in report.notes
+
+
+def test_cross_check_reads_a_raw_rules_column_and_collects_statements():
+    """When the agent selects the rules JSON column itself rather than a library template with
+    named columns, code still extracts the first rule; the statements come from the tool calls."""
+    from agents.items import ToolCallItem
+
+    rules = [
+        {
+            "id": "r9",
+            "description": "agentic-demo rate limit",
+            "ratelimit": {"requests_per_period": 100, "period": 10},
+        }
+    ]
+    row = [{"id": "rs9", "rules": json.dumps(rules)}]
+    sql = "SELECT id, rules FROM cloudflare.rulesets.phases WHERE zone_id = 'z' AND ruleset_phase = 'http_ratelimit'"
+    call = ToolCallItem(
+        agent=Agent(name="t"),
+        raw_item={
+            "type": "function_call",
+            "call_id": "c",
+            "name": "run_select_query",
+            "arguments": json.dumps({"sql": sql, "format": "json"}),
+        },
+    )
+    report = cross_check(ReconReport(), [call, _output_item(row)], 60)
+    assert (report.ruleset_id, report.rule_id, report.threshold, report.period) == (
+        "rs9",
+        "r9",
+        100,
+        10,
+    )
+    assert report.rule_description == "agentic-demo rate limit"
+    assert json.loads(report.rules_json) == rules
+    assert report.statements == [sql]
+    assert report.resources_read == ["cloudflare.rulesets.phases"]
+
+
+def test_policy_override_drops_the_models_statements():
+    policy = Policy(elevated_rps=5.0, tightened_threshold=30, baseline_threshold=100, period=10)
+    quiet = ReconReport(requests_per_second=0.2, threshold=100, period=10)
+    d = enforce_policy(
+        Decision(
+            action="tighten",
+            new_threshold=30,
+            rationale="r",
+            statement="REPLACE ...",
+            verification_select="SELECT 1",
+            rollback_statement="REPLACE ...",
+        ),
+        quiet,
+        policy,
+    )
+    assert (d.action, d.new_threshold) == ("hold", 100)
+    assert d.statement == "" and d.verification_select == "" and d.rollback_statement == ""

@@ -1,7 +1,7 @@
 """Command line entry point.
 
     uv run python -m finops setup    [--providers aws,azure,google]
-    uv run python -m finops validate [--providers ...]
+    uv run python -m finops validate [--providers ...]   (the example SELECTs in queries/examples/)
     uv run python -m finops run      [--providers ...] [--skip-reasoning] [--snapshot-max-age-days N]
 
 Run from inside finops/ (or `uv run finops ...` via the console script). `.env` is read from the
@@ -49,10 +49,12 @@ async def cmd_setup(providers: list[str]) -> int:
 
 
 async def cmd_validate(providers: list[str]) -> int:
-    """validate_select_query for every SELECT in finops/queries/ whose providers are in scope."""
+    """validate_select_query for every example SELECT in finops/queries/examples/ whose
+    providers are in scope. The models never receive these files; they are the shape of a
+    finops query, kept as documentation and checked here so they stay correct."""
     failures = 0
     async with read_only_server("stackql-validate", filtered=False) as server:
-        for q in list_queries(kind="select"):
+        for q in list_queries():
             if not all(p in providers for p in q.providers):
                 console.print(f"skip  {q.id} (providers {q.providers} not selected)")
                 continue
@@ -73,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="finops",
         description="FinOps cost optimisation audit: a scheduled, read-only sweep for idle and "
-        "orphaned resources across AWS, Azure and Google Cloud via the StackQL MCP server.",
+        "orphaned resources across AWS, Azure and Google Cloud. The agents work from intent "
+        "prompts (finops/prompts/) and discover resources through the StackQL MCP server.",
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
     prov_help = f"comma-separated subset of {','.join(PROVIDERS)} (default: every provider with credentials in .env)"
@@ -81,7 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     p_setup = sub.add_parser("setup", help="pull providers into the approot and print server_info")
     p_setup.add_argument("--providers", help=prov_help)
 
-    p_val = sub.add_parser("validate", help="validate_select_query for every SELECT in queries/")
+    p_val = sub.add_parser(
+        "validate", help="validate_select_query for the example SELECTs in queries/examples/"
+    )
     p_val.add_argument("--providers", help=prov_help)
 
     p_run = sub.add_parser("run", help="run the sweep once")

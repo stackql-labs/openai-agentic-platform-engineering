@@ -1,11 +1,12 @@
-"""The orchestration end to end with the model and the server replaced: the sweep tier's
-FindingSet is normalised and printed, every provider with findings gets one reasoning batch,
-the markdown report and the run record are written, and the ledger counts select calls only."""
+"""The orchestration end to end with the model and the server replaced: the prompts are
+rendered from finops/prompts/ with the discovery briefing and server instructions appended,
+the sweep input is a trigger (no SQL), the sweep tier's FindingSet is normalised and printed,
+every provider with findings gets one reasoning batch, the markdown report and the run record
+are written, and the ledger counts select calls only."""
 
 from __future__ import annotations
 
 import json
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 from agents import Usage
@@ -47,15 +48,27 @@ async def test_run_sweep_end_to_end(monkeypatch, tmp_path):
     monkeypatch.setattr(costs, "RUNS_DIR", tmp_path)
     monkeypatch.setattr(sweep, "assert_read_only", lambda server: None)
 
-    @asynccontextmanager
-    async def fake_server(name):
-        yield SimpleNamespace(name=name)
+    class FakeServer:
+        """Stands in for MCPServerStdio: its own async context manager, with read_resource."""
 
-    monkeypatch.setattr(sweep, "read_only_server", fake_server)
+        def __init__(self, name):
+            self.name = name
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def read_resource(self, uri):
+            assert uri == "stackql://docs/instructions"
+            return SimpleNamespace(contents=[SimpleNamespace(text="SERVER GUIDANCE")])
+
+    monkeypatch.setattr(sweep, "read_only_server", FakeServer)
     calls = []
 
     async def fake_run(agent, input, max_turns):
-        calls.append((agent.name, agent.model, input))
+        calls.append((agent.name, agent.model, input, agent.instructions))
         if agent.output_type is FindingSet:
             return FakeResult(
                 agent,
@@ -94,7 +107,23 @@ async def test_run_sweep_end_to_end(monkeypatch, tmp_path):
         "finops-reasoning-azure",
     ]
     assert calls[0][1] == "test-sweep-model" and calls[1][1] == "test-reasoning-model"
-    assert "finops/aws_unattached_volumes" in calls[0][2] and "google" not in calls[0][2]
+    # the sweep input is a trigger, not a query pack; the instructions are the rendered prompts
+    assert "Providers in scope: aws, azure." in calls[0][2] and "SELECT" not in calls[0][2].upper()
+    sweep_instr = calls[0][3]
+    assert "{{" not in sweep_instr
+    assert (
+        "- aws: region ap-southeast-2" in sweep_instr
+        and "google" not in sweep_instr.split("## Output")[0].split("## Tenancy")[1]
+    )
+    assert "query_library_search" in sweep_instr and "SERVER GUIDANCE" in sweep_instr
+    assert sweep_instr.index("## Working with StackQL") < sweep_instr.index("SERVER GUIDANCE")
+    reasoning_instr = calls[1][3]
+    assert "(aws)" in reasoning_instr and "describe_method" in reasoning_instr
+    assert (
+        "- aws: region ap-southeast-2" in reasoning_instr
+        and "- azure: subscription" not in reasoning_instr
+    )
+    assert "SERVER GUIDANCE" in reasoning_instr
     assert '"fingerprint"' in calls[1][2] and "disk-1" not in calls[1][2]
 
     md = next(tmp_path.glob("finops-*.md")).read_text()
@@ -104,7 +133,7 @@ async def test_run_sweep_end_to_end(monkeypatch, tmp_path):
     sev = {f["resource"]: f["severity"] for f in js["findings"]["findings"]}
     assert sev == {"vol-1": "low", "disk-1": "high"}
     assert [e["label"] for e in js["entries"]] == [
-        "sweep (classify)",
+        "sweep (discover + classify)",
         "reasoning (aws)",
         "reasoning (azure)",
     ]

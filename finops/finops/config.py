@@ -19,6 +19,7 @@ USECASE_DIR = PACKAGE_DIR.parent  # finops/
 REPO_ROOT = USECASE_DIR.parent  # repo root: .env, pricing.json, runs/
 ENV_FILE = REPO_ROOT / ".env"
 QUERIES_DIR = USECASE_DIR / "queries"
+PROMPTS_DIR = USECASE_DIR / "prompts"
 RUNS_DIR = REPO_ROOT / "runs"
 PRICING_FILE = REPO_ROOT / "pricing.json"
 
@@ -118,8 +119,15 @@ def settings() -> Settings:
 
 
 def param_defaults() -> dict[str, str]:
-    """Query parameters that have a documented default when the env variable is unset."""
-    return {"snapshot_max_age_days": str(settings().snapshot_max_age_days)}
+    """Placeholder values (prompts and example queries) with a documented default when the env
+    variable is unset."""
+    s = settings()
+    return {
+        "snapshot_max_age_days": str(s.snapshot_max_age_days),
+        "demo_prefix": s.demo_prefix,
+        "demo_tag_key": s.demo_tag_key,
+        "demo_tag_value": s.demo_tag_value,
+    }
 
 
 def provider_configured(provider: str) -> bool:

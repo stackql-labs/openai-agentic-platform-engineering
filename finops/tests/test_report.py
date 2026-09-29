@@ -1,5 +1,5 @@
-"""Sweep plumbing that needs no model: provider selection, the query pack, severity
-normalisation, the cost ledger and the markdown cost report."""
+"""Sweep plumbing that needs no model: provider selection, the tenancy block and trigger the
+prompts receive, severity normalisation, the cost ledger and the markdown cost report."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 from finops.costs import RunEntry, RunLedger, price_for
 from finops.findings import Finding, FindingSet, ProposedDeletion, ProviderPlan
 from finops.report import write_markdown_report
-from finops.sweep import normalise, query_pack, remediation_templates, select_providers
+from finops.sweep import normalise, select_providers, sweep_trigger, tenancy_block
 
 
 def _f(provider, resource, cost, ftype="unattached_volume"):
@@ -42,12 +42,12 @@ def test_select_providers_uses_credentials_or_flag(monkeypatch):
         select_providers(["google"])
 
 
-def test_query_pack_is_scoped_to_selected_providers():
-    pack = query_pack(["aws"])
-    assert "finops/aws_unattached_volumes" in pack and "'ap-southeast-2'" in pack
-    assert "azure" not in pack and "google" not in pack
-    assert "<volume_id>" in pack and "<allocation_id>" in pack
-    assert "finops/remediation/google_delete_disk" in remediation_templates(["google"])
+def test_tenancy_block_and_trigger_carry_no_sql():
+    block = tenancy_block(["aws", "google"])
+    assert block == "- aws: region ap-southeast-2\n- google: project demo-project"
+    assert "azure" not in block
+    trig = sweep_trigger(["aws"])
+    assert "Providers in scope: aws." in trig and "SELECT" not in trig.upper()
 
 
 def test_normalise_reapplies_severity_and_scope():
@@ -121,3 +121,4 @@ def test_markdown_report(tmp_path):
     assert text.index("eipalloc-1'") < text.index("volume_id = 'vol-1'")  # ordered by savings
     assert "trace_id=trace_x" in text and "not executed" in text
     assert "mutation" in text and "| sweep (classify) | m | 2 |" in text
+    assert "query `finops/aws_x`" in text and "queries/" not in text.split("## Evidence")[1]

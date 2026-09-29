@@ -14,16 +14,19 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 use serde_json::{json, Map, Value};
-use rmcp::model::{CallToolRequestParams, CallToolResult, Tool};
+use rmcp::model::{CallToolRequestParams, CallToolResult, ReadResourceRequestParams, ResourceContents, Tool};
 use stackql_mcp::{Builder, Mode, RunningServer, StackqlMcp};
 
 use crate::config::Settings;
 use crate::cost::utc_now_iso;
 
-/// The tools a model may hold: SELECT execution and validation, plus discovery.
+/// The tools a model may hold: SELECT execution and validation, the query library, and the
+/// discovery tools it uses to find resources and their IO contracts itself.
 pub const MODEL_TOOL_ALLOWLIST: &[&str] = &[
     "run_select_query",
     "validate_select_query",
+    "query_library_search",
+    "query_library_get",
     "list_providers",
     "list_services",
     "list_resources",
@@ -31,6 +34,9 @@ pub const MODEL_TOOL_ALLOWLIST: &[&str] = &[
     "describe_resource",
     "describe_method",
 ];
+
+/// The MCP resource the server publishes with its own usage guidance.
+pub const INSTRUCTIONS_RESOURCE: &str = "stackql://docs/instructions";
 
 /// Never exposed to a model, whatever the server mode.
 pub const MUTATION_TOOLS: &[&str] = &["run_mutation_query", "run_lifecycle_operation"];
@@ -222,6 +228,43 @@ impl Server {
         }
     }
 
+    /// Read an MCP resource (`resources/read`) and return its text contents joined.
+    pub async fn read_resource(&self, uri: &str) -> Result<String> {
+        let r = self
+            .inner
+            .read_resource(ReadResourceRequestParams::new(uri.to_string()))
+            .await
+            .map_err(|e| anyhow!("read_resource {uri}: {e}"))?;
+        let text = r
+            .contents
+            .iter()
+            .filter_map(|c| match c {
+                ResourceContents::TextResourceContents { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        if text.trim().is_empty() {
+            bail!("read_resource {uri}: no text contents");
+        }
+        Ok(text)
+    }
+
+    /// The server's own instructions (`stackql://docs/instructions`), appended to every prompt.
+    /// A failed read is reported on the console and the run continues without it.
+    pub async fn instructions(&self) -> Option<String> {
+        match self.read_resource(INSTRUCTIONS_RESOURCE).await {
+            Ok(t) => {
+                println!("read {} ({} chars) - appended to the discovery briefing", INSTRUCTIONS_RESOURCE, t.chars().count());
+                Some(t)
+            }
+            Err(e) => {
+                println!("could not read {INSTRUCTIONS_RESOURCE} ({e}) - continuing without the server instructions");
+                None
+            }
+        }
+    }
+
     pub async fn server_info(&self) -> Result<String> {
         let out = self.call("server_info", Map::new()).await?;
         Ok(out
@@ -306,7 +349,9 @@ mod tests {
         assert!(kept.iter().any(|k| k == "run_select_query"));
         assert!(kept.iter().any(|k| k == "validate_select_query"));
         assert!(!kept.iter().any(|k| k == "server_info"));
-        assert!(!kept.iter().any(|k| k == "query_library_get"));
+        assert!(kept.iter().any(|k| k == "query_library_search"));
+        assert!(kept.iter().any(|k| k == "query_library_get"));
+        assert!(kept.iter().any(|k| k == "describe_method"));
     }
 
     #[test]
