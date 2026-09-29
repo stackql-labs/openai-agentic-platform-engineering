@@ -1,0 +1,47 @@
+# Edge autopilot demo estate: one Cloudflare rate limiting rule on the demo zone.
+#
+# The zone's http_ratelimit phase entrypoint ruleset is set to a single rule that blocks a client
+# (ip.src + cf.colo.id) after BASELINE_THRESHOLD requests in 10 seconds on any path. The rule's
+# description starts with DEMO_PREFIX; the agent's approval gate asserts that prefix before it
+# changes anything, so a rule this stack did not create is never touched.
+#
+# Notes:
+# - the Cloudflare free plan allows one rate limiting rule per zone, which is all this stack sets
+# - REPLACE on cloudflare.rulesets.phases replaces every rule in the phase: build overwrites any
+#   http_ratelimit rules already on the zone, and teardown resets the phase to an empty list
+# - after the agent tightens the threshold, `stackql-deploy test` reports the resource out of
+#   state (it checks BASELINE_THRESHOLD); `uv run python -m edge restore` or a rebuild puts it back
+# - the API token (CLOUDFLARE_API_TOKEN) needs Zone -> Zone WAF: Edit on the demo zone for the
+#   stack and the gate, and Zone -> Analytics: Read for the recon agent
+#
+# Build:    stackql-deploy build edge/stack dev --env-file .env
+# Test:     stackql-deploy test  edge/stack dev --env-file .env
+# Teardown: stackql-deploy teardown edge/stack dev --env-file .env
+version: 1
+name: edge-autopilot
+description: one rate limiting rule on the demo Cloudflare zone for the edge autopilot use case
+providers:
+  - cloudflare::v26.07.00424
+globals:
+  - name: zone_id
+    description: the demo zone (CLOUDFLARE_ZONE_ID); every statement is pinned to it
+    value: "{{ CLOUDFLARE_ZONE_ID }}"
+  - name: demo_prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: baseline_threshold
+    description: requests per period before the rule blocks (BASELINE_THRESHOLD, default 100)
+    value: "{{ BASELINE_THRESHOLD }}"
+  - name: rule_description
+    description: the marker the gate asserts before any mutation; keep DEMO_PREFIX first
+    value: "{{ DEMO_PREFIX }} rate limit (managed by stackql-deploy)"
+resources:
+  - name: rate_limit_ruleset
+    description: the single demo rate limiting rule in the zone's http_ratelimit phase
+    props:
+      - name: period
+        value: 10
+      - name: mitigation_timeout
+        value: 10
+    exports:
+      - ruleset_id
+      - rule_id

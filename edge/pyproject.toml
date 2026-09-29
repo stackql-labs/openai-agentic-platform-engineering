@@ -1,0 +1,35 @@
+[project]
+name = "edge"
+version = "0.1.0"
+description = "Edge autopilot - Cloudflare zone recon, rate limit decision and approval-gated tightening on the OpenAI Agents SDK with StackQL via MCP"
+requires-python = ">=3.12"
+dependencies = [
+    "openai-agents>=0.22,<1",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+    "stackql-mcp-server>=0.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
