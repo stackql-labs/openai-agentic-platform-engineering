@@ -1,109 +1,100 @@
 # openai-agentic-platform-engineering
-# Every target runs with the repo's .env (python-dotenv loads it; stackql reads it via --env.file).
-# Windows: run from Git Bash or WSL (GNU make + bash). uv manages the Python environment.
+# Thin wrapper over each use case's own toolchain. Every target runs from the repo root and every
+# process reads the repo-root .env. See README.md for what each use case does.
 
 SHELL := bash
-export PYTHONUTF8 := 1
-export PYTHONIOENCODING := utf-8
 .DEFAULT_GOAL := help
-UV ?= uv
-PY := $(UV) run python
-STACKQL ?= stackql
-APPROOT ?= .stackql
-PROVIDERS := aws azure google github openai_admin entra_id okta
+USE_CASES := finops entitlements sre drift edge
+STACKQL_DEPLOY ?= stackql-deploy
 
 help: ## list targets
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-22s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-24s %s\n", $$1, $$2}'
 
-# --- phase 0 ------------------------------------------------------------------
-setup: ## install deps (uv), pull StackQL providers into ./.stackql, verify MCP server_info
-	$(UV) sync --extra dev
+env: ## create .env from .env.example if it does not exist
 	@test -f .env || (cp .env.example .env && echo "created .env from .env.example - fill it in")
-	@mkdir -p $(APPROOT) runs snapshots
-	@for p in $(PROVIDERS); do $(STACKQL) exec --approot $(APPROOT) "REGISTRY PULL $$p" >/dev/null && echo "pulled $$p"; done
-	$(PY) -m oape_agents.tools.verify_mcp
 
-smoke: ## smoke agent: list providers + one SELECT per configured provider (live)
-	$(PY) -m oape_agents.smoke
+# --- setup: install deps and pull the StackQL providers each use case needs ----------------
+setup: env setup-finops setup-entitlements setup-sre setup-drift setup-edge ## everything
 
-lint: ## ruff check + format check
-	$(UV) run ruff check .
-	$(UV) run ruff format --check .
+setup-finops: ## python: uv sync, pull aws/azure/google, verify server_info
+	cd finops && uv sync && uv run python -m finops setup
 
-fmt: ## ruff format
-	$(UV) run ruff format .
+setup-entitlements: ## typescript: npm install, pull entra_id/okta/aws/azure/google/github
+	cd entitlements && npm install && npm run setup
 
-test: ## unit tests (gate unreachability, schema, query loader) - no live APIs
-	$(UV) run pytest -q -m "not live"
+setup-sre: ## rust: cargo build, pull k8s
+	cd sre && cargo build --release && ./target/release/sre setup
 
-# --- phase 1: demo estate -------------------------------------------------------
-seed: ## build the deliberately misconfigured demo estate (tagged purpose=oape-demo)
-	$(PY) -m seed.run seed
+setup-drift: ## javascript: npm install, pull aws/azure
+	cd drift && npm install && node src/cli.js setup
 
-teardown: ## destroy everything tagged purpose=oape-demo (idempotent, tag-filtered)
-	$(PY) -m seed.run teardown
+setup-edge: ## python: uv sync, pull cloudflare/github
+	cd edge && uv sync && uv run python -m edge setup
 
-seed-check: ## checklist query per planted misconfiguration - each must return its row
-	$(PY) -m seed.run check
+# --- demo estates: one stackql-deploy stack per use case (per provider where multi-cloud) --
+stack-finops: ## deploy the finops estate (aws, azure, google sub-stacks)
+	$(STACKQL_DEPLOY) build finops/stack/aws dev --env-file .env
+	$(STACKQL_DEPLOY) build finops/stack/azure dev --env-file .env
+	$(STACKQL_DEPLOY) build finops/stack/google dev --env-file .env
 
-seed-status: ## what exists right now, per provider
-	$(PY) -m seed.run status
+stack-entitlements: ## deploy the entitlements estate (aws, entra_id sub-stacks)
+	$(STACKQL_DEPLOY) build entitlements/stack/aws dev --env-file .env
+	$(STACKQL_DEPLOY) build entitlements/stack/entra_id dev --env-file .env
 
-tf-apply: ## apply the terraform-managed subset (produces tfstate for the drift scenario)
-	cd seed/terraform && terraform init -input=false >/dev/null && terraform apply -auto-approve -input=false
+stack-sre: ## deploy the sre estate into the kind cluster (needs kubectl proxy on KUBE_CLUSTER_ADDR)
+	$(STACKQL_DEPLOY) build sre/stack dev --env-file .env
 
-tf-perturb: ## perturb the terraform-managed resources out of band (tag change + attribute drift)
-	$(PY) -m seed.terraform.perturb
+stack-drift: ## deploy the drift estate (aws, azure sub-stacks)
+	$(STACKQL_DEPLOY) build drift/stack/aws dev --env-file .env
+	$(STACKQL_DEPLOY) build drift/stack/azure dev --env-file .env
 
-tf-destroy: ## destroy the terraform-managed subset
-	cd seed/terraform && terraform destroy -auto-approve -input=false
+stack-edge: ## deploy the edge estate (cloudflare rate limit ruleset)
+	$(STACKQL_DEPLOY) build edge/stack dev --env-file .env
 
-# --- phase 2: query library -----------------------------------------------------
-validate-queries: ## run validate_select_query / dryrun across queries/ and check expected columns
-	$(PY) -m oape_agents.tools.validate_queries
+teardown-finops: ## remove the finops estate
+	$(STACKQL_DEPLOY) teardown finops/stack/aws dev --env-file .env
+	$(STACKQL_DEPLOY) teardown finops/stack/azure dev --env-file .env
+	$(STACKQL_DEPLOY) teardown finops/stack/google dev --env-file .env
 
-# --- phase 3: sweeps ------------------------------------------------------------
-sweep-cspm: ## CSPM sweep (read-only) -> GitHub issues + console brief + cost
-	$(PY) -m oape_agents.sweeps.cspm
+teardown-entitlements: ## remove the entitlements estate
+	$(STACKQL_DEPLOY) teardown entitlements/stack/aws dev --env-file .env
+	$(STACKQL_DEPLOY) teardown entitlements/stack/entra_id dev --env-file .env
 
-sweep-entitlements: ## entitlements audit (read-only) -> recertification report + cost
-	$(PY) -m oape_agents.sweeps.entitlements
+teardown-sre: ## remove the sre estate from the kind cluster
+	$(STACKQL_DEPLOY) teardown sre/stack dev --env-file .env
 
-sweep-finops: ## FinOps sweep (read-only) -> GitHub issues + console brief + cost
-	$(PY) -m oape_agents.sweeps.finops
+teardown-drift: ## remove the drift estate
+	$(STACKQL_DEPLOY) teardown drift/stack/aws dev --env-file .env
+	$(STACKQL_DEPLOY) teardown drift/stack/azure dev --env-file .env
 
-schedule: ## run all three sweeps on the SWEEP_SCHEDULE_MINUTES interval (ctrl-c to stop)
-	$(PY) -m oape_agents.scheduler
+teardown-edge: ## remove the edge estate (resets the rate limit phase)
+	$(STACKQL_DEPLOY) teardown edge/stack dev --env-file .env
 
-# --- phase 4: gated triage ------------------------------------------------------
-alert: ## fire the synthetic alert (writes runs/alert.json)
-	$(PY) -m oape_agents.triage.alert
+# --- run once (each README shows the always-on trigger) ------------------------------------
+finops: ## FinOps sweep: idle resources across aws/azure/google -> cost report
+	cd finops && uv run python -m finops run
 
-triage: ## diagnose -> propose -> approval gate -> mutate -> verify (the one mutation)
-	$(PY) -m oape_agents.triage.triage
+entitlements: ## entitlements audit: privileged principals + IdP joins -> recertification report
+	cd entitlements && npm run sweep
 
-triage-reset: ## put the triage target back to its pre-incident state
-	$(PY) -m oape_agents.triage.triage --reset
+sre-alert: ## fire the synthetic incident (event trigger)
+	cd sre && ./target/release/sre alert
 
-# --- phase 5: drift ---------------------------------------------------------------
-snapshot: ## materialize the estate into the local backend (snapshots/estate.db)
-	$(PY) -m oape_agents.drift.snapshot
+sre: ## agentic SRE: diagnose -> propose -> approval gate -> one mutation -> verify
+	cd sre && ./target/release/sre run
 
-drift: ## delta brief: current vs prior snapshot, plus tfstate comparison
-	$(PY) -m oape_agents.drift.brief
+drift: ## drift briefing: snapshot -> SQL delta -> brief on deltas only
+	cd drift && node src/cli.js run
 
-# --- phase 6: closer ----------------------------------------------------------------
-openai-estate: ## governance brief over the OpenAI org (projects, service account keys, spend)
-	$(PY) -m oape_agents.openai_estate.estate
+edge: ## edge autopilot: recon -> decision -> approval gate -> rate limit REPLACE -> decision record
+	cd edge && uv run python -m edge run
 
-# --- phase 7: rehearsal -------------------------------------------------------------
-rehearse: ## full demo running order against fallbacks, no live APIs
-	$(PY) -m oape_agents.rehearse
+# --- checks -----------------------------------------------------------------------------------
+test: ## every use case's offline tests, lint and typecheck
+	cd finops && uv run ruff check . && uv run pytest -q
+	cd entitlements && npx tsc --noEmit && npm test
+	cd sre && cargo test --quiet
+	cd drift && npm test
+	cd edge && uv run ruff check . && uv run pytest -q
 
-record-fallbacks: ## re-record fallbacks from live runs (needs seeded estate)
-	$(PY) -m oape_agents.rehearse --record
-
-reset: ## close demo issues, reset triage target, clear runs/ - between rehearsals
-	$(PY) -m oape_agents.tools.reset
-
-.PHONY: help setup smoke lint fmt test seed teardown seed-check seed-status tf-apply tf-perturb tf-destroy validate-queries sweep-cspm sweep-entitlements sweep-finops schedule alert triage triage-reset snapshot drift openai-estate rehearse record-fallbacks reset
+.PHONY: help env setup $(addprefix setup-,$(USE_CASES)) $(addprefix stack-,$(USE_CASES)) $(addprefix teardown-,$(USE_CASES)) $(USE_CASES) sre-alert test
