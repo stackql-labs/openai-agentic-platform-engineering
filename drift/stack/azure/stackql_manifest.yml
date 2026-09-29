@@ -1,0 +1,57 @@
+# Drift demo estate on Azure - the intended state the drift agent compares against.
+#
+# One resource group <DEMO_PREFIX>-drift-rg holding one network security group
+# <DEMO_PREFIX>-app-nsg with a single inbound Allow rule (tcp/443 from 10.0.0.0/8), tagged
+# DEMO_TAG_KEY=DEMO_TAG_VALUE. Nothing is attached to it, so the stack costs nothing.
+# `drift perturb` later adds an inbound Allow any/any rule out of band; that is the drift the
+# hourly run reports.
+#
+# Operator identity needs Contributor (or Network Contributor plus resource group write) on the
+# subscription. Same style as the reference azure stack: INSERT with the createorupdate anchor.
+#
+# Build:    stackql-deploy build drift/stack/azure dev --env-file .env
+# Test:     stackql-deploy test  drift/stack/azure dev --env-file .env
+# Teardown: stackql-deploy teardown drift/stack/azure dev --env-file .env   (deletes the resource group)
+version: 1
+name: drift-azure
+description: intended network state for the drift detection demo (Azure)
+providers:
+  - azure::v26.07.00420
+globals:
+  - name: subscription_id
+    value: "{{ AZURE_SUBSCRIPTION_ID }}"
+  - name: location
+    value: "{{ AZURE_LOCATION }}"
+  - name: demo_prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: demo_tag_key
+    value: "{{ DEMO_TAG_KEY }}"
+  - name: demo_tag_value
+    value: "{{ DEMO_TAG_VALUE }}"
+resources:
+  - name: resource_group
+    props:
+      - name: resource_group_name
+        value: "{{ demo_prefix }}-drift-rg"
+    exports:
+      - resource_group_name
+
+  - name: nsg
+    description: intended state - one inbound Allow rule, tcp/443 from 10.0.0.0/8
+    props:
+      - name: nsg_name
+        value: "{{ demo_prefix }}-app-nsg"
+      - name: security_rules
+        value:
+          - name: AllowHttpsFromCorp
+            properties:
+              access: Allow
+              protocol: Tcp
+              direction: Inbound
+              priority: 100
+              sourceAddressPrefix: 10.0.0.0/8
+              sourcePortRange: "*"
+              destinationAddressPrefix: "*"
+              destinationPortRange: "443"
+    exports:
+      - nsg_name

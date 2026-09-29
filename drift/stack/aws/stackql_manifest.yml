@@ -1,0 +1,66 @@
+# Drift demo estate on AWS - the intended state the drift agent compares against.
+#
+# One security group named <DEMO_PREFIX>-app-sg in the default VPC of AWS_REGION with a single
+# ingress rule (tcp/443 from 10.0.0.0/8), tagged DEMO_TAG_KEY=DEMO_TAG_VALUE. No instances, so
+# the stack costs nothing (security groups are free). `drift perturb` later adds tcp/22 from
+# 0.0.0.0/0 out of band; that is the drift the hourly run reports.
+#
+# Operator identity needs: ec2:DescribeVpcs, ec2:DescribeSecurityGroups, ec2:DescribeSecurityGroupRules,
+# ec2:CreateSecurityGroup, ec2:CreateTags, ec2:AuthorizeSecurityGroupIngress,
+# ec2:RevokeSecurityGroupIngress, ec2:DeleteSecurityGroup. The region must still have its default VPC.
+#
+# Build:    stackql-deploy build drift/stack/aws dev --env-file .env
+# Test:     stackql-deploy test  drift/stack/aws dev --env-file .env
+# Teardown: stackql-deploy teardown drift/stack/aws dev --env-file .env
+version: 1
+name: drift-aws
+description: intended network state for the drift detection demo (AWS)
+providers:
+  - aws::v26.08.00444
+globals:
+  - name: region
+    value: "{{ AWS_REGION }}"
+  - name: demo_prefix
+    value: "{{ DEMO_PREFIX }}"
+  - name: demo_tag_key
+    value: "{{ DEMO_TAG_KEY }}"
+  - name: demo_tag_value
+    value: "{{ DEMO_TAG_VALUE }}"
+  - name: global_tags
+    value:
+      - Key: "{{ DEMO_TAG_KEY }}"
+        Value: "{{ DEMO_TAG_VALUE }}"
+      - Key: managed-by
+        Value: stackql-deploy
+      - Key: stackName
+        Value: "{{ stack_name }}"
+      - Key: stackEnv
+        Value: "{{ stack_env }}"
+resources:
+  - name: default_vpc
+    type: query
+    description: reads the id of the region's default VPC (nothing is created)
+    exports:
+      - vpc_id
+
+  - name: app_sg
+    description: the application security group - intended state has one ingress rule (see app_sg_ingress)
+    props:
+      - name: sg_name
+        value: "{{ demo_prefix }}-app-sg"
+      - name: sg_description
+        value: "drift demo application security group (intended state managed by stackql-deploy)"
+    exports:
+      - sg_id
+
+  - name: app_sg_ingress
+    description: intended ingress - tcp/443 from 10.0.0.0/8 only
+    props:
+      - name: ingress_permissions
+        value:
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            IpRanges:
+              - CidrIp: 10.0.0.0/8
+                Description: https from the corporate range
